@@ -1349,3 +1349,175 @@ export function WageReceiptsCard({ payeeRecords, openPayeeWageDetails }: WageRec
     </Card>
   )
 }
+
+"use client"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { CheckCircle2, Loader2, ExternalLink } from "lucide-react"
+import { Button } from "@/components/ui/button"
+
+interface Vault {
+    id: string
+    name: string
+    address: string
+    url: string
+    apy?: number
+    loading?: boolean
+}
+
+const VAULTS: Vault[] = [
+    {
+        id: "re7-labs",
+        name: "Re7 Labs Cluster",
+        address: "0x39dE0f00189306062D79eDEC6DcA5bb6bFd108f9",
+        url: "https://app.euler.finance/vault/0x39dE0f00189306062D79eDEC6DcA5bb6bFd108f9?network=avalanche"
+    },
+    {
+        id: "k3-capital",
+        name: "K3 Capital Cluster",
+        address: "0x6fC9b3a52944A577cd8971Fd8fDE0819001bC595",
+        url: "https://app.euler.finance/vault/0x6fC9b3a52944A577cd8971Fd8fDE0819001bC595?network=avalanche"
+    },
+    {
+        id: "mev-capital-avalanche",
+        name: "MEV Capital Avalanche Cluster",
+        address: "0x69B07dB605d0A08fbE9245c1466880AA36c8E1A7",
+        url: "https://app.euler.finance/vault/0x69B07dB605d0A08fbE9245c1466880AA36c8E1A7?network=avalanche"
+    }
+]
+
+interface VaultSelectorProps {
+    selectedVault: string
+    onVaultSelect: (vaultId: string) => void
+    className?: string
+}
+
+export function VaultSelector({ selectedVault, onVaultSelect, className = "" }: VaultSelectorProps) {
+    const [vaults, setVaults] = useState<Vault[]>(VAULTS.map(v => ({ ...v, loading: true })))
+
+    useEffect(() => {
+        // Fetch APY data for all vaults
+        const fetchVaultData = async () => {
+            try {
+                const response = await fetch('/api/vault-apy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                })
+
+                if (response.ok) {
+                    const data = await response.json()
+                    const updatedVaults = VAULTS.map(vault => {
+                        const vaultData = data.vaults.find((v: any) => v.vaultId === vault.id)
+                        return {
+                            ...vault,
+                            apy: vaultData?.apy,
+                            loading: false
+                        }
+                    })
+                    setVaults(updatedVaults)
+                } else {
+                    // Fallback to loading state false if API fails
+                    setVaults(VAULTS.map(v => ({ ...v, loading: false })))
+                }
+            } catch (error) {
+                console.error('Failed to fetch vault APY data:', error)
+                // Fallback to loading state false if API fails
+                setVaults(VAULTS.map(v => ({ ...v, loading: false })))
+            }
+        }
+
+        fetchVaultData()
+    }, [])
+
+    return (
+        <div className={`space-y-3 ${className}`}>
+            <div className="grid gap-3">
+                {/* None option */}
+                <Card
+                    className={`cursor-pointer transition-all hover:shadow-md ${selectedVault === "none" || selectedVault === ""
+                            ? "ring-2 ring-blue-500 bg-blue-50"
+                            : "hover:bg-gray-50"
+                        }`}
+                    onClick={() => onVaultSelect("none")}
+                >
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="font-medium text-gray-900">No Yield Source</h3>
+                                <p className="text-sm text-gray-500">Standard USDC payments without yield</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Badge variant="secondary">0% APY</Badge>
+                                {(selectedVault === "none" || selectedVault === "") && (
+                                    <CheckCircle2 className="h-5 w-5 text-blue-500" />
+                                )}
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Vault options */}
+                {vaults.map((vault) => (
+                    <Card
+                        key={vault.id}
+                        className={`cursor-pointer transition-all hover:shadow-md ${selectedVault === vault.id
+                                ? "ring-2 ring-blue-500 bg-blue-50"
+                                : "hover:bg-gray-50"
+                            }`}
+                        onClick={() => onVaultSelect(vault.id)}
+                    >
+                        <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-medium text-gray-900">{vault.name}</h3>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-6 w-6 p-0 hover:bg-gray-200"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                window.open(vault.url, '_blank', 'noopener,noreferrer')
+                                            }}
+                                            title={`Visit ${vault.name} on Euler Finance`}
+                                        >
+                                            <ExternalLink className="h-3 w-3 text-gray-500" />
+                                        </Button>
+                                    </div>
+                                    <p className="text-sm text-gray-500 font-mono">
+                                        {vault.address.slice(0, 6)}...{vault.address.slice(-4)}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {vault.loading ? (
+                                        <div className="flex items-center gap-2">
+                                            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                                            <Badge variant="outline">Loading...</Badge>
+                                        </div>
+                                    ) : vault.apy !== undefined ? (
+                                        <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
+                                            {vault.apy.toFixed(2)}% APY
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant="outline">APY N/A</Badge>
+                                    )}
+                                    {selectedVault === vault.id && (
+                                        <CheckCircle2 className="h-5 w-5 text-blue-500" />
+                                    )}
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
+            <p className="text-xs text-gray-500">
+                APY rates are fetched from Euler Finance and may vary. Select a vault to earn yield on deposited funds.
+            </p>
+        </div>
+    )
+}
