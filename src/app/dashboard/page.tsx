@@ -13,7 +13,21 @@ import { WagePaymentsCard } from "@/components/WagePaymentsCard"
 import { WageGroupCreateDialog } from "@/components/WageGroupCreateDialog"
 import { VaultSelector } from "@/components/VaultSelector"
 import { WageGroupForm, Payee } from "@/types/wage"
-import { Wallet } from "lucide-react"
+import { 
+  Wallet, 
+  Users, 
+  DollarSign, 
+  TrendingUp, 
+  Target, 
+  UserPlus, 
+  FileText, 
+  Settings, 
+  BarChart3,
+  Activity,
+  CheckCircle,
+  XCircle,
+  Loader2
+} from "lucide-react"
 import { avalancheFork } from "@/config/chains"
 import { CONTRACT_ADDRESSES } from "@/config/contracts"
 import { thirdwebClient } from "@/config/thirdweb-client"
@@ -764,15 +778,15 @@ export default function DashboardPage() {
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <span className="text-white text-lg">📊</span>
+                  <Users className="h-5 w-5 text-white" />
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-purple-600 truncate">
-                    Total Users
+                    Total Employees
                   </dt>
-                  <dd className="text-2xl font-bold text-purple-900">1,234</dd>
+                  <dd className="text-2xl font-bold text-purple-900">124</dd>
                 </dl>
               </div>
             </div>
@@ -782,15 +796,15 @@ export default function DashboardPage() {
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <span className="text-white text-lg">💰</span>
+                  <DollarSign className="h-5 w-5 text-white" />
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-violet-600 truncate">
-                    Revenue
+                    Total Deposits
                   </dt>
-                  <dd className="text-2xl font-bold text-violet-900">$12,345</dd>
+                  <dd className="text-2xl font-bold text-violet-900">$2,345</dd>
                 </dl>
               </div>
             </div>
@@ -800,15 +814,15 @@ export default function DashboardPage() {
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <span className="text-white text-lg">📈</span>
+                  <TrendingUp className="h-5 w-5 text-white" />
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-indigo-600 truncate">
-                    Growth Rate
+                    Yield Earned
                   </dt>
-                  <dd className="text-2xl font-bold text-indigo-900">+12.5%</dd>
+                  <dd className="text-2xl font-bold text-indigo-900">$143.72</dd>
                 </dl>
               </div>
             </div>
@@ -818,15 +832,15 @@ export default function DashboardPage() {
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <span className="text-white text-lg">🎯</span>
+                  <Target className="h-5 w-5 text-white" />
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-purple-600 truncate">
-                    Conversion
+                    Yield APY
                   </dt>
-                  <dd className="text-2xl font-bold text-purple-900">3.2%</dd>
+                  <dd className="text-2xl font-bold text-purple-900">13.2%</dd>
                 </dl>
               </div>
             </div>
@@ -838,7 +852,10 @@ export default function DashboardPage() {
           {/* Recent Activity */}
           <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-purple-100/50 hover:shadow-xl transition-all duration-300">
             <div className="px-6 py-4 border-b border-purple-100/50 bg-gradient-to-r from-purple-50/50 to-violet-50/50">
-              <h3 className="text-lg font-semibold text-purple-900">Recent Activity</h3>
+              <div className="flex items-center space-x-2">
+                <Activity className="h-5 w-5 text-purple-600" />
+                <h3 className="text-lg font-semibold text-purple-900">Recent Activity</h3>
+              </div>
             </div>
             <div className="p-6">
               <div className="space-y-4">
@@ -847,7 +864,7 @@ export default function DashboardPage() {
                     <div className="h-3 w-3 bg-gradient-to-r from-purple-400 to-violet-500 rounded-full shadow-sm"></div>
                     <div className="flex-1">
                       <p className="text-sm text-gray-900 font-medium">
-                        New user registered: user{item}@example.com
+                        New worker registered: worker{item}@yourcompany.com
                       </p>
                       <p className="text-xs text-purple-600/70">2 hours ago</p>
                     </div>
@@ -865,19 +882,19 @@ export default function DashboardPage() {
             <div className="p-6">
               <div className="grid grid-cols-2 gap-4">
                 <button className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-purple-200 rounded-xl hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-300 group">
-                  <span className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-200">➕</span>
+                  <UserPlus className="h-8 w-8 text-purple-500 mb-3 group-hover:scale-110 transition-transform duration-200" />
                   <span className="text-sm font-semibold text-purple-700">Add User</span>
                 </button>
                 <button className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-purple-200 rounded-xl hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-300 group">
-                  <span className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-200">📄</span>
+                  <FileText className="h-8 w-8 text-purple-500 mb-3 group-hover:scale-110 transition-transform duration-200" />
                   <span className="text-sm font-semibold text-purple-700">New Report</span>
                 </button>
                 <button className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-purple-200 rounded-xl hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-300 group">
-                  <span className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-200">⚙️</span>
+                  <Settings className="h-8 w-8 text-purple-500 mb-3 group-hover:scale-110 transition-transform duration-200" />
                   <span className="text-sm font-semibold text-purple-700">Settings</span>
                 </button>
                 <button className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-purple-200 rounded-xl hover:border-purple-300 hover:bg-purple-50/30 transition-all duration-300 group">
-                  <span className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-200">📊</span>
+                  <BarChart3 className="h-8 w-8 text-purple-500 mb-3 group-hover:scale-110 transition-transform duration-200" />
                   <span className="text-sm font-semibold text-purple-700">Analytics</span>
                 </button>
               </div>
@@ -888,16 +905,21 @@ export default function DashboardPage() {
         {/* Bottom Section */}
         <div className="mt-8 bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-purple-100/50 hover:shadow-xl transition-all duration-300">
           <div className="px-6 py-4 border-b border-purple-100/50 bg-gradient-to-r from-purple-50/50 to-violet-50/50">
-            <h3 className="text-lg font-semibold text-purple-900">Data Overview</h3>
+            <div className="flex items-center space-x-2">
+              <BarChart3 className="h-5 w-5 text-purple-600" />
+              <h3 className="text-lg font-semibold text-purple-900">Data Overview</h3>
+            </div>
           </div>
           <div className="p-6">
             <div className="text-center py-12">
-              <div className="text-purple-300 text-6xl mb-4">📈</div>
+              <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-purple-100 to-violet-100 rounded-2xl flex items-center justify-center">
+                <TrendingUp className="h-8 w-8 text-purple-500" />
+              </div>
               <h3 className="text-xl font-semibold text-purple-900 mb-2">
                 Charts and Analytics Coming Soon
               </h3>
-              <p className="text-purple-600/70">
-                This section will display detailed analytics and data visualizations.
+              <p className="text-purple-600/70 max-w-md mx-auto">
+                This section will display detailed analytics and data visualizations to help you track performance and make informed decisions.
               </p>
             </div>
           </div>
@@ -1163,29 +1185,25 @@ export default function DashboardPage() {
               }`}>
                 {depositStatus === 'approving' && (
                   <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     {depositMessage}
                   </div>
                 )}
                 {depositStatus === 'depositing' && (
                   <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     {depositMessage}
                   </div>
                 )}
                 {depositStatus === 'success' && (
                   <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-green-600 flex items-center justify-center">
-                      <div className="h-2 w-2 bg-white rounded-full"></div>
-                    </div>
+                    <CheckCircle className="h-4 w-4 text-green-600" />
                     {depositMessage}
                   </div>
                 )}
                 {depositStatus === 'error' && (
                   <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-red-600 flex items-center justify-center">
-                      <div className="h-1 w-2 bg-white rounded-full"></div>
-                    </div>
+                    <XCircle className="h-4 w-4 text-red-600" />
                     {depositMessage}
                   </div>
                 )}

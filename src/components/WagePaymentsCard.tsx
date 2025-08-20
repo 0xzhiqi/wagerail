@@ -83,7 +83,7 @@ export function WagePaymentsCard({
           <div className="space-y-4">
             <div className="bg-gradient-to-br from-purple-50 to-violet-50/80 rounded-xl p-4 border border-purple-100/50">
               <p className="text-sm font-medium text-purple-700 mb-2">
-                Your wage groups ({wageGroups.length})
+                Your wage groups 
               </p>
               <div className="bg-white/80 backdrop-blur-sm rounded-lg border border-purple-100/50 overflow-hidden">
                 <Table>
