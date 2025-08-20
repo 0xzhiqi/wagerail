@@ -39,16 +39,20 @@ model Session {
 }
 
 model Deposit {
-  id              String    @id @default(auto()) @map("_id") @db.ObjectId
-  userId          String    @db.ObjectId
-  wageGroupId     String    @db.ObjectId
-  transactionHash String
-  usdcAmount      Float     // Amount of USDC deposited
-  sharesReceived  Float     // Amount of shares received
-  yieldSource     String    // "re7-labs", "k3-capital", "mev-capital-avalanche"
-  createdAt       DateTime  @default(now())
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  wageGroup       WageGroup @relation(fields: [wageGroupId], references: [id], onDelete: Cascade)
+  id                    String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId                String    @db.ObjectId
+  wageGroupId           String    @db.ObjectId
+  transactionHash       String    // Vault deposit transaction hash
+  encryptedErcTxHash    String?   // Encrypted ERC deposit transaction hash (optional)
+  usdcAmount            Float     // Amount of USDC deposited
+  sharesReceived        Float     // Amount of shares received from vault
+  encryptedAmount       Float?    // Amount deposited into encrypted ERC (optional)
+  encryptedErcStatus    String?   // Status: "pending", "completed", "failed" (optional)
+  encryptedErcTokenId   String?   // Token ID from encrypted ERC (optional)
+  yieldSource           String    // "re7-labs", "k3-capital", "mev-capital-avalanche"
+  createdAt             DateTime  @default(now())
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wageGroup             WageGroup @relation(fields: [wageGroupId], references: [id], onDelete: Cascade)
 
   @@map("deposits")
 }
