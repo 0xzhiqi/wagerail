@@ -1,228 +1,1351 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { useActiveAccount, useConnect, useDisconnect, useActiveWallet } from "thirdweb/react";
-import { preAuthenticate } from "thirdweb/wallets/in-app";
-import { useSession, signIn, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { avalancheFork } from "@/config/chains";
-import { wallet } from "@/config/wallet";
-import { thirdwebClient } from "@/config/thirdweb-client";
+import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
+import { useActiveAccount, useConnect, useReadContract, useSendTransaction } from "thirdweb/react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { VaultSelector } from "@/components/VaultSelector"
+import { Edit, EllipsisVertical, Wallet, PaintBucket } from "lucide-react"
+import { signOut } from "next-auth/react"
+import { avalancheFork } from "@/config/chains"
+import { CONTRACT_ADDRESSES } from "@/config/contracts"
+import { thirdwebClient } from "@/config/thirdweb-client"
+import { toast } from "sonner"
+import { prepareContractCall, getContract } from "thirdweb"
+import { waitForReceipt } from "thirdweb"
 
-export function LoginForm() {
-    const [email, setEmail] = useState("");
-    const [verificationCode, setVerificationCode] = useState("");
-    const [isOtpSent, setIsOtpSent] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isInitializing, setIsInitializing] = useState(true);
+// Import the components
+import { UserInfoCard } from "./components/UserInfoCard"
+import { WageSettingsCard } from "./components/WageSettingsCard"
+import { WageReceiptsCard } from "./components/WageReceiptsCard"
 
-    const { connect } = useConnect();
-    const { disconnect } = useDisconnect();
-    const activeAccount = useActiveAccount();
-    const activeWallet = useActiveWallet();
-    const { data: session } = useSession();
-    const router = useRouter();
+// Import types
+import { UserData, Payee, WageGroupForm, WageGroup } from "./types"
 
-    const fundSmartAccount = async (address: string) => {
-        try {
-            console.log('Funding smart account with AVAX:', address);
-            
-            const response = await fetch('/api/fund-account', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address }),
-            });
-            
-            const result = await response.json();
-            if (result.success) {
-                console.log('Smart account funded with 10 AVAX for gas fees');
-            } else {
-                console.error('Failed to fund account:', result.error);
-            }
-        } catch (error) {
-            console.error('Failed to fund account:', error);
-        }
-    };
+export default function Dashboard() {
+    const { data: session, status } = useSession()
+    const activeAccount = useActiveAccount()
+    const { connect } = useConnect()
+    const router = useRouter()
+    const [userData, setUserData] = useState<UserData | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [updating, setUpdating] = useState(false)
+    const [walletReconnectAttempted, setWalletReconnectAttempted] = useState(false)
+    const [editDialogOpen, setEditDialogOpen] = useState(false)
+    const [wageDialogOpen, setWageDialogOpen] = useState(false)
+    const [formData, setFormData] = useState({
+        firstName: "",
+        middleName: "",
+        lastName: ""
+    })
+    const [wageFormData, setWageFormData] = useState<WageGroupForm>({
+        name: "",
+        startDate: "",
+        paymentDate: "",
+        yieldSource: "none",
+        payees: [{ email: "", monthlyAmount: "" }]
+    })
+    const [editFormData, setEditFormData] = useState<WageGroupForm>({
+        name: "",
+        startDate: "",
+        paymentDate: "",
+        yieldSource: "none",
+        payees: [{ email: "", monthlyAmount: "" }]
+    })
+    const [creatingWageGroup, setCreatingWageGroup] = useState(false)
+    const [updatingWageGroup, setUpdatingWageGroup] = useState(false)
+    const [wageGroups, setWageGroups] = useState<WageGroup[]>([])
+    const [payeeRecords, setPayeeRecords] = useState<any[]>([])
+    const [editingWageGroup, setEditingWageGroup] = useState<WageGroup | null>(null)
+    const [editDialogOpen2, setEditDialogOpen2] = useState(false)
+    const [wageDetailsDialogOpen, setWageDetailsDialogOpen] = useState(false)
+    const [selectedWageGroup, setSelectedWageGroup] = useState<WageGroup | null>(null)
+    
+    // Add USDC balance state
+    const [usdcBalance, setUsdcBalance] = useState<string>("0")
+    
+    // Add new state variables for top-up dialog
+    const [topUpDialogOpen, setTopUpDialogOpen] = useState(false)
+    const [topUpWageGroup, setTopUpWageGroup] = useState<WageGroup | null>(null)
+    const [topUpAmount, setTopUpAmount] = useState<string>('')
+    const [isDepositing, setIsDepositing] = useState(false)
 
-    // Auto-reconnect on mount if wallet has stored session
+    // Add useSendTransaction hook for contract interactions
+    const { mutate: sendTransaction } = useSendTransaction()
+    
+    // Create contract instances
+    const usdcContract = getContract({
+        address: CONTRACT_ADDRESSES.USDC as `0x${string}`,
+        chain: avalancheFork,
+        client: thirdwebClient
+    })
+    
+    // Read USDC balance from contract
+    const { data: balanceData, refetch: refetchBalance } = useReadContract({
+        contract: usdcContract,
+        method: "function balanceOf(address account) view returns (uint256)",
+        params: [activeAccount?.address || "0x0000000000000000000000000000000000000000"]
+    })
+
+    // Update USDC balance when balanceData changes
     useEffect(() => {
-        const autoReconnect = async () => {
-            try {
-                // Try to auto-connect the wallet (this checks for stored sessions)
-                await wallet.autoConnect({ client: thirdwebClient });
+        if (balanceData && activeAccount) {
+            // Convert from wei (assuming 6 decimals for USDC)
+            const balance = Number(balanceData) / 10**6
+            setUsdcBalance(balance.toFixed(2))
+        } else {
+            setUsdcBalance("0")
+        }
+    }, [balanceData, activeAccount])
 
-                // If autoConnect succeeded, connect it to the provider
+    // Auto-reconnect wallet on page load
+    useEffect(() => {
+        const attemptWalletReconnect = async () => {
+            if (walletReconnectAttempted) return
+
+            try {
+                const { wallet } = await import("@/config/wallet")
+                const { thirdwebClient } = await import("@/config/thirdweb-client")
+
+                console.log("Attempting wallet auto-reconnect...")
+                await wallet.autoConnect({ client: thirdwebClient })
+
                 if (wallet.getAccount()) {
-                    await connect(async () => wallet);
+                    await connect(async () => wallet)
+                    console.log("Wallet reconnected successfully")
                 }
             } catch (error) {
-                console.log("No stored session to restore");
+                console.log("Wallet auto-reconnect failed:", error)
             } finally {
-                setIsInitializing(false);
+                setWalletReconnectAttempted(true)
             }
-        };
-
-        autoReconnect();
-    }, [connect]);
-
-    const sendOtp = async () => {
-        if (!email) return;
-
-        setIsLoading(true);
-        try {
-            await preAuthenticate({
-                client: thirdwebClient,
-                strategy: "email",
-                email,
-            });
-            setIsOtpSent(true);
-        } catch (error) {
-            console.error("Failed to send OTP:", error);
-        } finally {
-            setIsLoading(false);
         }
-    };
 
-    const handleLogin = async () => {
-        if (!email || !verificationCode) return;
-    
-        setIsLoading(true);
+        if (status !== "loading") {
+            attemptWalletReconnect()
+        }
+    }, [status, connect, walletReconnectAttempted])
+
+    useEffect(() => {
+        if (status === "loading" || !walletReconnectAttempted) return
+
+        console.log("Dashboard auth check:")
+        console.log("- Session:", !!session, session?.user?.id)
+        console.log("- Active account:", !!activeAccount, activeAccount?.address)
+
+        if (!session) {
+            console.log("No session - redirecting to home")
+            router.push("/")
+            return
+        }
+
+        // If we have a session but no active account, still allow access
+        // The wallet might reconnect later or user can reconnect manually
+        console.log("Session found - fetching user data")
+        fetchUserData()
+        fetchWageGroups()
+        fetchPayeeRecords()
+    }, [session, activeAccount, status, router, walletReconnectAttempted])
+
+    // Auto-refresh wage groups when page gains focus
+    useEffect(() => {
+        if (!session) return
+
+        const handleFocus = () => {
+            fetchWageGroups()
+            fetchPayeeRecords()
+        }
+
+        window.addEventListener('focus', handleFocus)
+
+        return () => {
+            window.removeEventListener('focus', handleFocus)
+        }
+    }, [session])
+
+    const fetchUserData = async () => {
         try {
-            // First connect the wallet
-            await connect(async () => {
-                await wallet.connect({
-                    client: thirdwebClient,
-                    strategy: "email",
-                    email,
-                    verificationCode,
-                    chain: avalancheFork
-                });
-                return wallet;
-            });
-    
-            // Wait a moment for the wallet to be fully connected
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Get the wallet address
-            const account = wallet.getAccount();
-            if (account) {
-                // 🔥 ADD THIS: Fund the smart account with AVAX for gas
-                await fundSmartAccount(account.address);
-                
-                // Sign in using NextAuth
-                const result = await signIn("wallet", {
-                    email,
-                    walletAddress: account.address,
-                    redirect: false,
-                });
-    
-                if (result?.ok) {
-                    console.log('User authenticated successfully');
-                    router.push('/dashboard');
-                } else {
-                    console.error('Failed to create session:', result?.error);
-                }
+            const response = await fetch("/api/user")
+            console.log("User API response status:", response.status)
+
+            if (response.ok) {
+                const data = await response.json()
+                console.log("User data:", data)
+                setUserData(data)
+            } else {
+                const errorData = await response.json()
+                console.error("User API error:", errorData)
+                router.push("/")
             }
         } catch (error) {
-            console.error("Failed to login:", error);
+            console.error("Error fetching user data:", error)
+            router.push("/")
         } finally {
-            setIsLoading(false);
+            setLoading(false)
         }
-    };
-
-    if (isInitializing) {
-        return (
-            <div className="text-center">
-                <p className="text-gray-600">Checking connection...</p>
-            </div>
-        );
     }
 
-    if (activeAccount && session) {
+    const handleUpdateNames = async () => {
+        setUpdating(true)
+        try {
+            const response = await fetch("/api/user/update-names", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(formData),
+            })
+
+            if (response.ok) {
+                await fetchUserData() // Refresh user data
+                setEditDialogOpen(false) // Close dialog on success
+            } else {
+                const error = await response.json()
+                console.error("Failed to update names:", error.error)
+            }
+        } catch (error) {
+            console.error("Error updating names:", error)
+        } finally {
+            setUpdating(false)
+        }
+    }
+
+    const openEditDialog = () => {
+        setFormData({
+            firstName: userData?.firstName || "",
+            middleName: userData?.middleName || "",
+            lastName: userData?.lastName || ""
+        })
+        setEditDialogOpen(true)
+    }
+
+    const getDisplayName = () => {
+        if (!userData) return ""
+        const parts = [userData.firstName, userData.middleName, userData.lastName].filter(Boolean)
+        return parts.length > 0 ? parts.join(" ") : ""
+    }
+
+    const addPayee = () => {
+        setWageFormData(prev => ({
+            ...prev,
+            payees: [...prev.payees, { email: "", monthlyAmount: "" }]
+        }))
+    }
+
+    const removePayee = (index: number) => {
+        setWageFormData(prev => ({
+            ...prev,
+            payees: prev.payees.filter((_, i) => i !== index)
+        }))
+    }
+
+    const updatePayee = (index: number, field: keyof Payee, value: string) => {
+        setWageFormData(prev => ({
+            ...prev,
+            payees: prev.payees.map((payee, i) =>
+                i === index ? { ...payee, [field]: value } : payee
+            )
+        }))
+    }
+
+    const addEditPayee = () => {
+        setEditFormData(prev => ({
+            ...prev,
+            payees: [...prev.payees, { email: "", monthlyAmount: "" }]
+        }))
+    }
+
+    const removeEditPayee = (index: number) => {
+        setEditFormData(prev => ({
+            ...prev,
+            payees: prev.payees.filter((_, i) => i !== index)
+        }))
+    }
+
+    const updateEditPayee = (index: number, field: keyof Payee, value: string) => {
+        setEditFormData(prev => ({
+            ...prev,
+            payees: prev.payees.map((payee, i) =>
+                i === index ? { ...payee, [field]: value } : payee
+            )
+        }))
+    }
+
+    const fetchWageGroups = async () => {
+        try {
+            // Add cache-busting parameter to ensure fresh data
+            const response = await fetch(`/api/wage-groups?t=${Date.now()}`, {
+                cache: 'no-store'
+            })
+            if (response.ok) {
+                const data = await response.json()
+                setWageGroups(data)
+                console.log("Wage groups refreshed:", data.length, "groups found")
+            } else {
+                console.error("Failed to fetch wage groups")
+            }
+        } catch (error) {
+            console.error("Error fetching wage groups:", error)
+        }
+    }
+
+    const fetchPayeeRecords = async () => {
+        try {
+            const response = await fetch(`/api/payee/payments?t=${Date.now()}`, {
+                cache: 'no-store'
+            })
+            if (response.ok) {
+                const data = await response.json()
+                setPayeeRecords(data)
+                console.log("Payee records refreshed:", data.length, "records found")
+            } else {
+                console.error("Failed to fetch payee records")
+            }
+        } catch (error) {
+            console.error("Error fetching payee records:", error)
+        }
+    }
+
+    const validateWageForm = (formData = wageFormData) => {
+        if (!formData.name.trim()) {
+            console.error("Wage group name is required")
+            return false
+        }
+
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
+        const startDate = new Date(formData.startDate)
+        if (startDate <= today) {
+            console.error("Start date must be later than today")
+            return false
+        }
+
+        const paymentDateNum = parseInt(formData.paymentDate)
+        if (!paymentDateNum || paymentDateNum < 1 || paymentDateNum > 31) {
+            console.error("Payment date must be between 1 and 31")
+            return false
+        }
+
+        // Check if first payment is in the future
+        const firstPaymentDate = new Date(startDate.getFullYear(), startDate.getMonth(), paymentDateNum)
+        if (firstPaymentDate <= today) {
+            const nextMonthPayment = new Date(startDate.getFullYear(), startDate.getMonth() + 1, paymentDateNum)
+            if (nextMonthPayment <= today) {
+                console.error("First payment date must be in the future")
+                return false
+            }
+        }
+
+        // Validate payees
+        for (const payee of formData.payees) {
+            if (!payee.email || !payee.monthlyAmount) {
+                console.error("All payees must have email and monthly amount")
+                return false
+            }
+
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+            if (!emailRegex.test(payee.email)) {
+                console.error("Please enter valid email addresses")
+                return false
+            }
+
+            if (parseFloat(payee.monthlyAmount) <= 0) {
+                console.error("Monthly amounts must be greater than 0")
+                return false
+            }
+        }
+
+        return true
+    }
+
+    const openCreateDialog = () => {
+        setWageFormData({
+            name: "",
+            startDate: "",
+            paymentDate: "",
+            yieldSource: "none",
+            payees: [{ email: "", monthlyAmount: "" }]
+        })
+        setWageDialogOpen(true)
+    }
+
+    const openEditWageGroup = (group: WageGroup) => {
+        setEditingWageGroup(group)
+        setEditFormData({
+            name: group.name,
+            startDate: new Date(group.startDate).toISOString().split('T')[0],
+            paymentDate: group.paymentDate.toString(),
+            yieldSource: group.yieldSource || "none",
+            payees: group.payees.map(p => ({
+                email: p.email,
+                monthlyAmount: p.monthlyAmount.toString()
+            }))
+        })
+        setEditDialogOpen2(true)
+    }
+
+    const openWageDetails = (group: WageGroup) => {
+        setSelectedWageGroup(group)
+        setWageDetailsDialogOpen(true)
+    }
+
+    const openPayeeWageDetails = (record: any) => {
+        // Convert payee record to wage group format for the dialog
+        setSelectedWageGroup({
+            id: record.wageGroup.id,
+            name: record.wageGroup.name,
+            startDate: record.wageGroup.startDate,
+            paymentDate: record.wageGroup.paymentDate,
+            yieldSource: record.wageGroup.yieldSource,
+            isActive: record.wageGroup.isActive,
+            payees: []
+        })
+        setWageDetailsDialogOpen(true)
+    }
+    
+    // Function to open top-up dialog
+    const openTopUpDialog = (group: WageGroup) => {
+        setTopUpWageGroup(group)
+        setTopUpAmount('')
+        setTopUpDialogOpen(true)
+    }
+    
+    // Function to handle deposit
+
+    const handleDeposit = async () => {
+    if (!topUpWageGroup || !topUpWageGroup.yieldSource || !activeAccount || !userData) {
+        toast.error("Missing required information for deposit")
+        return
+    }
+    
+    const amount = parseFloat(topUpAmount)
+    if (isNaN(amount) || amount <= 0 || amount > parseFloat(usdcBalance)) {
+        toast.error("Invalid amount")
+        return
+    }
+    
+    setIsDepositing(true)
+    
+    try {
+        // Get vault address based on yield source
+        let vaultAddress = ""
+        switch (topUpWageGroup.yieldSource) {
+            case "re7-labs":
+                vaultAddress = CONTRACT_ADDRESSES.VAULTS.VAULT_1
+                break
+            case "k3-capital":
+                vaultAddress = CONTRACT_ADDRESSES.VAULTS.VAULT_2
+                break
+            case "mev-capital-avalanche":
+                vaultAddress = CONTRACT_ADDRESSES.VAULTS.VAULT_3
+                break
+            default:
+                toast.error("Invalid yield source")
+                setIsDepositing(false)
+                return
+        }
+        
+        // First approve USDC transfer
+        const amountInWei = BigInt(Math.floor(amount * 1000000)) // USDC has 6 decimals
+        
+        // Prepare approval transaction
+        const approvalTransaction = prepareContractCall({
+            contract: usdcContract,
+            method: "function approve(address spender, uint256 amount) returns (bool)",
+            params: [vaultAddress, amountInWei]
+        })
+        
+        toast.info("Approving USDC transfer...")
+        
+        // Send approval transaction and wait for receipt
+        const approvalPromise = new Promise((resolve, reject) => {
+            sendTransaction(approvalTransaction, {
+                onSuccess: async (result) => {
+                    try {
+                        const receipt = await waitForReceipt({
+                            client: thirdwebClient,
+                            chain: avalancheFork,
+                            transactionHash: result.transactionHash
+                        })
+                        resolve(receipt)
+                    } catch (error) {
+                        reject(error)
+                    }
+                },
+                onError: (error) => {
+                    reject(error)
+                }
+            })
+        })
+        
+        await approvalPromise
+        
+        // Create vault contract instance
+        const vaultContract = getContract({
+            address: vaultAddress as `0x${string}`,
+            chain: avalancheFork,
+            client: thirdwebClient
+        })
+        
+        // Prepare deposit transaction
+        const depositTransaction = prepareContractCall({
+            contract: vaultContract,
+            method: "function deposit(uint256 amount, address receiver) returns (uint256)",
+            params: [amountInWei, activeAccount.address]
+        })
+        
+        toast.info("Depositing USDC into vault...")
+        
+        // Send deposit transaction
+        const depositPromise = new Promise((resolve, reject) => {
+            sendTransaction(depositTransaction, {
+                onSuccess: async (result) => {
+                    try {
+                        const receipt = await waitForReceipt({
+                            client: thirdwebClient,
+                            chain: avalancheFork,
+                            transactionHash: result.transactionHash
+                        })
+                        
+                        let actualSharesReceived = BigInt(0)
+                        
+                        // Parse the transaction logs to get the actual shares minted
+                        // Look for the Deposit event: Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares)
+                        if (receipt.logs) {
+                            for (const log of receipt.logs) {
+                                // Deposit event signature: keccak256("Deposit(address,address,uint256,uint256)")
+                                if (log.topics[0] === "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7") {
+                                    // Parse the data field which contains assets (32 bytes) + shares (32 bytes)
+                                    const eventData = log.data
+                                    if (eventData && eventData.length >= 130) { // 0x + 64 chars assets + 64 chars shares
+                                        const sharesHex = eventData.slice(66, 130) // Skip 0x and first 64 chars (assets)
+                                        actualSharesReceived = BigInt("0x" + sharesHex)
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (actualSharesReceived === BigInt(0)) {
+                            // Could not parse shares from transaction logs
+                            toast.error("Deposit transaction completed but shares data could not be parsed")
+                            reject(new Error("Could not determine shares received"))
+                            return
+                        }
+                        
+                        // Convert shares from wei to human readable (18 decimals for vault shares)
+                        const sharesReceivedHuman = Number(actualSharesReceived) / 10**18
+                        
+                        // Record deposit in database with ACTUAL shares received
+                        const response = await fetch('/api/deposits', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                userId: userData.id,
+                                wageGroupId: topUpWageGroup.id,
+                                transactionHash: receipt.transactionHash,
+                                usdcAmount: amount,
+                                sharesReceived: sharesReceivedHuman,
+                                yieldSource: topUpWageGroup.yieldSource,
+                            }),
+                        })
+                        
+                        if (!response.ok) {
+                            throw new Error('Failed to record deposit in database')
+                        }
+                        
+                        toast.success(`Deposit successful! Received ${sharesReceivedHuman.toFixed(6)} vault shares`)
+                        setTopUpDialogOpen(false)
+                        fetchWageGroups()
+                        resolve(receipt)
+                        
+                    } catch (error) {
+                        reject(error)
+                    }
+                },
+                onError: (error) => {
+                    toast.error(`Deposit transaction failed: ${error.message}`)
+                    reject(error)
+                }
+            })
+        })
+        
+        await depositPromise
+        
+    } catch (error) {
+        console.error("Deposit error:", error)
+        toast.error("Failed to deposit: " + (error instanceof Error ? error.message : String(error)))
+    } finally {
+        setIsDepositing(false)
+        
+        // Always refresh balance after deposit attempt
+        setTimeout(async () => {
+            try {
+                await refetchBalance()
+                console.log("Balance refreshed after deposit")
+            } catch (error) {
+                console.error("Failed to refresh balance:", error)
+            }
+        }, 2000)
+    }
+}
+
+    const handleCreateWageGroup = async () => {
+        if (!validateWageForm()) return
+
+        setCreatingWageGroup(true)
+        try {
+            const submitData = {
+                ...wageFormData,
+                yieldSource: wageFormData.yieldSource === "none" ? "" : wageFormData.yieldSource
+            }
+
+            const response = await fetch("/api/wage-groups", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(submitData),
+            })
+
+            if (response.ok) {
+                setWageDialogOpen(false)
+                setWageFormData({
+                    name: "",
+                    startDate: "",
+                    paymentDate: "",
+                    yieldSource: "none",
+                    payees: [{ email: "", monthlyAmount: "" }]
+                })
+                await fetchWageGroups() // Refresh the list
+            } else {
+                const error = await response.json()
+                console.error("Failed to create wage group:", error.error)
+            }
+        } catch (error) {
+            console.error("Error creating wage group:", error)
+        } finally {
+            setCreatingWageGroup(false)
+        }
+    }
+
+    const handleUpdateWageGroup = async () => {
+        if (!editingWageGroup || !validateWageForm(editFormData)) return
+
+        setUpdatingWageGroup(true)
+        try {
+            const submitData = {
+                ...editFormData,
+                yieldSource: editFormData.yieldSource === "none" ? "" : editFormData.yieldSource
+            }
+
+            const response = await fetch(`/api/wage-groups/${editingWageGroup.id}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(submitData),
+            })
+
+            if (response.ok) {
+                setEditDialogOpen2(false)
+                setEditingWageGroup(null)
+                setEditFormData({
+                    name: "",
+                    startDate: "",
+                    paymentDate: "",
+                    yieldSource: "none",
+                    payees: [{ email: "", monthlyAmount: "" }]
+                })
+                await fetchWageGroups() // Refresh the list
+            } else {
+                const error = await response.json()
+                console.error("Failed to update wage group:", error.error)
+            }
+        } catch (error) {
+            console.error("Error updating wage group:", error)
+        } finally {
+            setUpdatingWageGroup(false)
+        }
+    }
+
+    if (loading || status === "loading" || !walletReconnectAttempted) {
         return (
-            <div className="text-center space-y-4">
-                <div>
-                    <p className="text-green-600 mb-2">Connected successfully!</p>
-                    <div className="text-sm text-gray-600 space-y-2">
-                        <div className="p-3 bg-green-50 rounded-lg border">
-                            <p className="font-medium text-green-900 mb-1">Session Info</p>
-                            <p className="text-xs text-green-700">Email: {session.user?.email}</p>
-                            <p className="text-xs text-green-700">User ID: {session.user?.id}</p>
-                        </div>
-                        <div className="p-3 bg-blue-50 rounded-lg border">
-                            <p className="font-medium text-blue-900 mb-1">Your Wallet Address</p>
-                            <p className="text-xs text-blue-700 break-all">{activeAccount.address}</p>
-                            <p className="text-xs text-blue-600 mt-1">Use this address to receive crypto</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="space-y-2">
-                    <Button
-                        onClick={async () => {
-                            await signOut({ redirect: false });
-                            disconnect(activeWallet!);
-                        }}
-                        variant="outline"
-                        className="w-full"
-                    >
-                        Sign Out & Disconnect
-                    </Button>
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                    <p className="mt-2 text-gray-600">
+                        {status === "loading" ? "Loading session..." :
+                            !walletReconnectAttempted ? "Reconnecting wallet..." :
+                                "Loading dashboard..."}
+                    </p>
                 </div>
             </div>
-        );
+        )
+    }
+
+    if (!userData) {
+        return null
     }
 
     return (
-        <div className="w-full max-w-md space-y-4">
-            <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium">
-                    Email
-                </label>
-                <Input
-                    id="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={isLoading}
-                />
-            </div>
-
-            {!isOtpSent ? (
-                <Button
-                    onClick={sendOtp}
-                    disabled={!email || isLoading}
-                    className="w-full"
-                >
-                    {isLoading ? "Sending..." : "Send OTP"}
-                </Button>
-            ) : (
-                <div className="space-y-4">
-                    <div className="space-y-2">
-                        <label htmlFor="code" className="text-sm font-medium">
-                            Verification Code
-                        </label>
-                        <Input
-                            id="code"
-                            type="text"
-                            placeholder="Enter verification code"
-                            value={verificationCode}
-                            onChange={(e) => setVerificationCode(e.target.value)}
-                            disabled={isLoading}
-                        />
+        <div className="min-h-screen py-8">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+                        <p className="text-gray-600"> Hi {getDisplayName()}</p>
                     </div>
                     <Button
-                        onClick={handleLogin}
-                        disabled={!verificationCode || isLoading}
-                        className="w-full"
+                        variant="outline"
+                        onClick={() => signOut({ callbackUrl: "/" })}
                     >
-                        {isLoading ? "Connecting..." : "Connect"}
+                        Sign Out
                     </Button>
                 </div>
-            )}
+
+                <div className="grid gap-6 md:grid-cols-2">
+                    {/* Replace with UserInfoCard component */}
+                    <UserInfoCard 
+                        userData={userData}
+                        activeAccount={activeAccount}
+                        openEditDialog={openEditDialog}
+                        getDisplayName={getDisplayName}
+                        // connect={connect}
+                    />
+
+                    {/* Replace with WageSettingsCard component */}
+                    <WageSettingsCard
+                        wageGroups={wageGroups}
+                        openCreateDialog={openCreateDialog}
+                        openEditWageGroup={openEditWageGroup}
+                        openTopUpDialog={openTopUpDialog}
+                    />
+
+                    {/* Replace with WageReceiptsCard component */}
+                    <WageReceiptsCard
+                        payeeRecords={payeeRecords}
+                        openPayeeWageDetails={openPayeeWageDetails}
+                    />
+                </div>
+            </div>
+
+            {/* Edit Name Dialog */}
+            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Edit Your Name</DialogTitle>
+                        <DialogDescription>
+                            Update your personal information. Click save when you're done.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="firstName">First Name</Label>
+                            <Input
+                                id="firstName"
+                                value={formData.firstName}
+                                onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                                placeholder="Enter your first name"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="middleName">Middle Name</Label>
+                            <Input
+                                id="middleName"
+                                value={formData.middleName}
+                                onChange={(e) => setFormData(prev => ({ ...prev, middleName: e.target.value }))}
+                                placeholder="Enter your middle name (optional)"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="lastName">Last Name</Label>
+                            <Input
+                                id="lastName"
+                                value={formData.lastName}
+                                onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                                placeholder="Enter your last name"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleUpdateNames} disabled={updating}>
+                            {updating ? "Saving..." : "Save Changes"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Create Wage Group Dialog */}
+            <Dialog open={wageDialogOpen} onOpenChange={setWageDialogOpen}>
+                <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Create Wage Group</DialogTitle>
+                        <DialogDescription>
+                            Set up automated USDC wage payments for your team.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-6 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Wage Group Name</Label>
+                            <Input
+                                id="name"
+                                value={wageFormData.name}
+                                onChange={(e) => setWageFormData(prev => ({ ...prev, name: e.target.value }))}
+                                placeholder="e.g., Development Team Q1"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="startDate">Start Date</Label>
+                                <Input
+                                    id="startDate"
+                                    type="date"
+                                    value={wageFormData.startDate}
+                                    onChange={(e) => setWageFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                                    min={new Date(Date.now() + 86400000).toISOString().split('T')[0]} // Tomorrow
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="paymentDate">Payment Date (Day of Month)</Label>
+                                <Input
+                                    id="paymentDate"
+                                    type="number"
+                                    min="1"
+                                    max="31"
+                                    value={wageFormData.paymentDate}
+                                    onChange={(e) => setWageFormData(prev => ({ ...prev, paymentDate: e.target.value }))}
+                                    placeholder="e.g., 15"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Yield Source</Label>
+                            <VaultSelector
+                                selectedVault={wageFormData.yieldSource || "none"}
+                                onVaultSelect={(value) => setWageFormData(prev => ({ ...prev, yieldSource: value === "none" ? "" : value }))}
+                            />
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <Label>Payees</Label>
+                                <Button type="button" variant="outline" size="sm" onClick={addPayee}>
+                                    Add Payee
+                                </Button>
+                            </div>
+
+                            {wageFormData.payees.map((payee, index) => (
+                                <div key={index} className="grid grid-cols-2 gap-4 p-4 border rounded-lg">
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`email-${index}`}>Email Address</Label>
+                                        <Input
+                                            id={`email-${index}`}
+                                            type="email"
+                                            value={payee.email}
+                                            onChange={(e) => updatePayee(index, 'email', e.target.value)}
+                                            placeholder="payee@example.com"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`amount-${index}`}>Monthly Amount (USDC)</Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id={`amount-${index}`}
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={payee.monthlyAmount}
+                                                onChange={(e) => updatePayee(index, 'monthlyAmount', e.target.value)}
+                                                placeholder="1000.00"
+                                            />
+                                            {wageFormData.payees.length > 1 && (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => removePayee(index)}
+                                                >
+                                                    Remove
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setWageDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleCreateWageGroup} disabled={creatingWageGroup}>
+                            {creatingWageGroup ? "Creating..." : "Save"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Wage Group Dialog */}
+            <Dialog open={editDialogOpen2} onOpenChange={setEditDialogOpen2}>
+                <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <div className="flex justify-between items-center">
+                            <DialogTitle>Edit Wage Group</DialogTitle>
+                            <div className="flex items-center gap-2 text-sm bg-gray-100 px-3 py-1 rounded-full">
+                                <Wallet className="h-4 w-4" />
+                                <span>{usdcBalance} USDC</span>
+                            </div>
+                        </div>
+                        <DialogDescription>
+                            Update your wage group settings and payees.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-6 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="editName">Wage Group Name</Label>
+                            <Input
+                                id="editName"
+                                value={editFormData.name}
+                                onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                                placeholder="e.g., Development Team Q1"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="editStartDate">Start Date</Label>
+                                <Input
+                                    id="editStartDate"
+                                    type="date"
+                                    value={editFormData.startDate}
+                                    onChange={(e) => setEditFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                                    min={new Date(Date.now() + 86400000).toISOString().split('T')[0]} // Tomorrow
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="editPaymentDate">Payment Date (Day of Month)</Label>
+                                <Input
+                                    id="editPaymentDate"
+                                    type="number"
+                                    min="1"
+                                    max="31"
+                                    value={editFormData.paymentDate}
+                                    onChange={(e) => setEditFormData(prev => ({ ...prev, paymentDate: e.target.value }))}
+                                    placeholder="e.g., 15"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Yield Source</Label>
+                            <VaultSelector
+                                selectedVault={editFormData.yieldSource || "none"}
+                                onVaultSelect={(value) => setEditFormData(prev => ({ ...prev, yieldSource: value === "none" ? "" : value }))}
+                            />
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <Label>Payees</Label>
+                                <Button type="button" variant="outline" size="sm" onClick={addEditPayee}>
+                                    Add Payee
+                                </Button>
+                            </div>
+
+                            {editFormData.payees.map((payee, index) => (
+                                <div key={index} className="grid grid-cols-2 gap-4 p-4 border rounded-lg">
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`editEmail-${index}`}>Email Address</Label>
+                                        <Input
+                                            id={`editEmail-${index}`}
+                                            type="email"
+                                            value={payee.email}
+                                            onChange={(e) => updateEditPayee(index, 'email', e.target.value)}
+                                            placeholder="payee@example.com"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`editAmount-${index}`}>Monthly Amount (USDC)</Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id={`editAmount-${index}`}
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={payee.monthlyAmount}
+                                                onChange={(e) => updateEditPayee(index, 'monthlyAmount', e.target.value)}
+                                                placeholder="1000.00"
+                                            />
+                                            {editFormData.payees.length > 1 && (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => removeEditPayee(index)}
+                                                >
+                                                    Remove
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditDialogOpen2(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleUpdateWageGroup} disabled={updatingWageGroup}>
+                            {updatingWageGroup ? "Updating..." : "Update"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Wage Details Dialog */}
+            <Dialog open={wageDetailsDialogOpen} onOpenChange={setWageDetailsDialogOpen}>
+                <DialogContent className="sm:max-w-[600px]">
+                    <DialogHeader>
+                        <DialogTitle>Wage Details</DialogTitle>
+                        <DialogDescription>
+                            Payment history for {selectedWageGroup?.name}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <div className="text-center text-gray-500 py-8">
+                            Wage details placeholder - payment history will be shown here
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setWageDetailsDialogOpen(false)}>
+                            Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Top-up Dialog */}
+             <Dialog open={topUpDialogOpen} onOpenChange={setTopUpDialogOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Top Up Wage Group</DialogTitle>
+                        <DialogDescription>
+                            Deposit USDC into the vault for this wage group.
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="wageGroupName">Wage Group</Label>
+                            <div className="p-2 border rounded-md bg-gray-50">
+                                {topUpWageGroup?.name || ""}
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <Label htmlFor="yieldSource">Yield Source</Label>
+                            <div className="p-2 border rounded-md bg-gray-50">
+                                {topUpWageGroup?.yieldSource === "re7-labs" && "Re7 Labs Cluster"}
+                                {topUpWageGroup?.yieldSource === "k3-capital" && "K3 Capital Cluster"}
+                                {topUpWageGroup?.yieldSource === "mev-capital-avalanche" && "MEV Capital Avalanche Cluster"}
+                                {!topUpWageGroup?.yieldSource && "None"}
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <Label htmlFor="topUpAmount">Amount to Deposit (USDC)</Label>
+                            <Input
+                                id="topUpAmount"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max={parseFloat(usdcBalance)}
+                                value={topUpAmount}
+                                onChange={(e) => setTopUpAmount(e.target.value)}
+                                placeholder="Enter amount"
+                            />
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                    <Wallet className="h-3 w-3" />
+                                    <span>Available: {usdcBalance} USDC</span>
+                                </div>
+                      
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setTopUpDialogOpen(false)} disabled={isDepositing}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleDeposit} disabled={isDepositing || !topUpAmount || parseFloat(topUpAmount) <= 0 || parseFloat(topUpAmount) > parseFloat(usdcBalance)}>
+                            {isDepositing ? "Depositing..." : "Top Up"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
-    );
+    )
 }
 
+"use client"
+
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import { useActiveAccount, useConnect } from "thirdweb/react"
+import { UserData } from "../types"
+
+interface UserInfoCardProps {
+  userData: UserData
+  activeAccount: ReturnType<typeof useActiveAccount>
+  openEditDialog: () => void
+  getDisplayName: () => string
+}
+
+export function UserInfoCard({ userData, activeAccount, openEditDialog, getDisplayName }: UserInfoCardProps) {
+  const { connect } = useConnect()
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Account Information</CardTitle>
+        <CardDescription>Your account details</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label className="text-sm font-medium text-gray-500">Email Address</Label>
+          <p className="text-sm text-gray-900">{userData.email || "Not provided"}</p>
+        </div>
+        <Separator />
+        <div>
+          <Label className="text-sm font-medium text-gray-500">Wallet Address</Label>
+          <p className="text-sm text-gray-900 break-all">
+            {activeAccount?.address || userData.walletAddress || "Not connected"}
+          </p>
+          {activeAccount ? (
+            <p className="text-xs text-green-600 mt-1">✓ Wallet connected</p>
+          ) : (
+            <div className="mt-2">
+              <p className="text-xs text-orange-600 mb-2">⚠ Wallet disconnected</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const { wallet } = await import("@/config/wallet")
+                    await connect(async () => wallet)
+                  } catch (error) {
+                    console.error("Manual reconnect failed:", error)
+                  }
+                }}
+              >
+                Reconnect Wallet
+              </Button>
+            </div>
+          )}
+        </div>
+        <Separator />
+        <div>
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium text-gray-500">Display Name</Label>
+            <Button size="sm" variant="outline" onClick={openEditDialog}>
+              Edit
+            </Button>
+          </div>
+          <p className="text-sm text-gray-900 mt-1">
+            {getDisplayName() || "No name set"}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+"use client"
+
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Edit, PaintBucket } from "lucide-react"
+import { WageGroup } from "../types"
+
+interface WageSettingsCardProps {
+  wageGroups: WageGroup[]
+  openCreateDialog: () => void
+  openEditWageGroup: (group: WageGroup) => void
+  openTopUpDialog: (group: WageGroup) => void
+}
+
+export function WageSettingsCard({ 
+  wageGroups, 
+  openCreateDialog, 
+  openEditWageGroup, 
+  openTopUpDialog 
+}: WageSettingsCardProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Wage Payments</CardTitle>
+            <CardDescription>Manage your wage groups and payments</CardDescription>
+          </div>
+          <Button onClick={openCreateDialog}>
+            Create Group
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {wageGroups.length === 0 ? (
+          <div className="text-sm text-gray-600">
+            Create and manage wage payment groups with automated USDC distributions.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="text-sm text-gray-600">
+              Your wage groups:
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Status</TableHead>
+                  <TableHead className="w-[50px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {wageGroups.map((group) => (
+                  <TableRow key={group.id}>
+                    <TableCell className="font-medium">
+                      <div>
+                        <div>{group.name}</div>
+                        <div className="text-xs text-gray-500 sm:hidden">
+                          {group.isActive ? "Active" : "Inactive"}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {group.payees.length} payee{group.payees.length !== 1 ? 's' : ''}
+                          ({group.payees.filter(p => p.user).length} registered)
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${group.isActive
+                        ? "bg-green-100 text-green-800"
+                        : "bg-gray-100 text-gray-800"
+                        }`}>
+                        {group.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditWageGroup(group)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openTopUpDialog(group)}
+                        >
+                          <PaintBucket className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+"use client"
+
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { EllipsisVertical } from "lucide-react"
+
+interface PayeeRecord {
+  id: string
+  monthlyAmount: number
+  wageGroup: {
+    id: string
+    name: string
+    paymentDate: number
+  }
+}
+
+interface WageReceiptsCardProps {
+  payeeRecords: PayeeRecord[]
+  openPayeeWageDetails: (record: PayeeRecord) => void
+}
+
+export function WageReceiptsCard({ payeeRecords, openPayeeWageDetails }: WageReceiptsCardProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Wage Receipts</CardTitle>
+        <CardDescription>View payment history for your wage groups</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {payeeRecords.length === 0 ? (
+          <div className="text-sm text-gray-600">
+            You are not currently a payee in any wage groups.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Group Name</TableHead>
+                <TableHead>Monthly Amount</TableHead>
+                <TableHead>Payment Date</TableHead>
+                <TableHead className="w-[50px]">Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payeeRecords.map((record) => (
+                <TableRow key={record.id}>
+                  <TableCell className="font-medium">{record.wageGroup.name}</TableCell>
+                  <TableCell>{record.monthlyAmount.toFixed(2)} USDC</TableCell>
+                  <TableCell>{record.wageGroup.paymentDate}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openPayeeWageDetails(record)}
+                    >
+                      <EllipsisVertical className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
