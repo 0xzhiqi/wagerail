@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Deposit {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String    @db.ObjectId
+  wageGroupId     String    @db.ObjectId
+  transactionHash String
+  usdcAmount      Float     // Amount of USDC deposited
+  sharesReceived  Float     // Amount of shares received
+  yieldSource     String    // "re7-labs", "k3-capital", "mev-capital-avalanche"
+  createdAt       DateTime  @default(now())
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wageGroup       WageGroup @relation(fields: [wageGroupId], references: [id], onDelete: Cascade)
+
+  @@map("deposits")
+}
+
+model User {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  name          String?
+  firstName     String?
+  middleName    String?
+  lastName      String?
+  email         String?     @unique
+  emailVerified DateTime?
+  image         String?
+  walletAddress String?     @unique
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  wageGroups    WageGroup[]
+  payeeRecords  Payee[]
+  deposits      Deposit[]   // Add this line
+
+  @@map("users")
+}
+
+model WageGroup {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String     @db.ObjectId
+  name            String
+  startDate       DateTime
+  paymentDate     Int        // Day of month (1-31)
+  yieldSource     String?    // "re7-labs", "k3-capital", "mev-capital-avalanche", or null
+  isActive        Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  payees          Payee[]
+  deposits        Deposit[]  // Add this line
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wage_groups")
+}
+
+model Payee {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  wageGroupId  String    @db.ObjectId
+  userId       String?   @db.ObjectId  // Optional - payee might not have registered yet
+  email        String
+  monthlyAmount Float    // Amount in USDC
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  wageGroup    WageGroup @relation(fields: [wageGroupId], references: [id], onDelete: Cascade)
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("payees")
+}

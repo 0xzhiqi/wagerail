@@ -1,0 +1,228 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useActiveAccount, useConnect, useDisconnect, useActiveWallet } from "thirdweb/react";
+import { preAuthenticate } from "thirdweb/wallets/in-app";
+import { useSession, signIn, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { avalancheFork } from "@/config/chains";
+import { wallet } from "@/config/wallet";
+import { thirdwebClient } from "@/config/thirdweb-client";
+
+export function LoginForm() {
+    const [email, setEmail] = useState("");
+    const [verificationCode, setVerificationCode] = useState("");
+    const [isOtpSent, setIsOtpSent] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isInitializing, setIsInitializing] = useState(true);
+
+    const { connect } = useConnect();
+    const { disconnect } = useDisconnect();
+    const activeAccount = useActiveAccount();
+    const activeWallet = useActiveWallet();
+    const { data: session } = useSession();
+    const router = useRouter();
+
+    const fundSmartAccount = async (address: string) => {
+        try {
+            console.log('Funding smart account with AVAX:', address);
+            
+            const response = await fetch('/api/fund-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address }),
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                console.log('Smart account funded with 10 AVAX for gas fees');
+            } else {
+                console.error('Failed to fund account:', result.error);
+            }
+        } catch (error) {
+            console.error('Failed to fund account:', error);
+        }
+    };
+
+    // Auto-reconnect on mount if wallet has stored session
+    useEffect(() => {
+        const autoReconnect = async () => {
+            try {
+                // Try to auto-connect the wallet (this checks for stored sessions)
+                await wallet.autoConnect({ client: thirdwebClient });
+
+                // If autoConnect succeeded, connect it to the provider
+                if (wallet.getAccount()) {
+                    await connect(async () => wallet);
+                }
+            } catch (error) {
+                console.log("No stored session to restore");
+            } finally {
+                setIsInitializing(false);
+            }
+        };
+
+        autoReconnect();
+    }, [connect]);
+
+    const sendOtp = async () => {
+        if (!email) return;
+
+        setIsLoading(true);
+        try {
+            await preAuthenticate({
+                client: thirdwebClient,
+                strategy: "email",
+                email,
+            });
+            setIsOtpSent(true);
+        } catch (error) {
+            console.error("Failed to send OTP:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleLogin = async () => {
+        if (!email || !verificationCode) return;
+    
+        setIsLoading(true);
+        try {
+            // First connect the wallet
+            await connect(async () => {
+                await wallet.connect({
+                    client: thirdwebClient,
+                    strategy: "email",
+                    email,
+                    verificationCode,
+                    chain: avalancheFork
+                });
+                return wallet;
+            });
+    
+            // Wait a moment for the wallet to be fully connected
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Get the wallet address
+            const account = wallet.getAccount();
+            if (account) {
+                // 🔥 ADD THIS: Fund the smart account with AVAX for gas
+                await fundSmartAccount(account.address);
+                
+                // Sign in using NextAuth
+                const result = await signIn("wallet", {
+                    email,
+                    walletAddress: account.address,
+                    redirect: false,
+                });
+    
+                if (result?.ok) {
+                    console.log('User authenticated successfully');
+                    router.push('/dashboard');
+                } else {
+                    console.error('Failed to create session:', result?.error);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to login:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    if (isInitializing) {
+        return (
+            <div className="text-center">
+                <p className="text-gray-600">Checking connection...</p>
+            </div>
+        );
+    }
+
+    if (activeAccount && session) {
+        return (
+            <div className="text-center space-y-4">
+                <div>
+                    <p className="text-green-600 mb-2">Connected successfully!</p>
+                    <div className="text-sm text-gray-600 space-y-2">
+                        <div className="p-3 bg-green-50 rounded-lg border">
+                            <p className="font-medium text-green-900 mb-1">Session Info</p>
+                            <p className="text-xs text-green-700">Email: {session.user?.email}</p>
+                            <p className="text-xs text-green-700">User ID: {session.user?.id}</p>
+                        </div>
+                        <div className="p-3 bg-blue-50 rounded-lg border">
+                            <p className="font-medium text-blue-900 mb-1">Your Wallet Address</p>
+                            <p className="text-xs text-blue-700 break-all">{activeAccount.address}</p>
+                            <p className="text-xs text-blue-600 mt-1">Use this address to receive crypto</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Button
+                        onClick={async () => {
+                            await signOut({ redirect: false });
+                            disconnect(activeWallet!);
+                        }}
+                        variant="outline"
+                        className="w-full"
+                    >
+                        Sign Out & Disconnect
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-full max-w-md space-y-4">
+            <div className="space-y-2">
+                <label htmlFor="email" className="text-sm font-medium">
+                    Email
+                </label>
+                <Input
+                    id="email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
+                />
+            </div>
+
+            {!isOtpSent ? (
+                <Button
+                    onClick={sendOtp}
+                    disabled={!email || isLoading}
+                    className="w-full"
+                >
+                    {isLoading ? "Sending..." : "Send OTP"}
+                </Button>
+            ) : (
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <label htmlFor="code" className="text-sm font-medium">
+                            Verification Code
+                        </label>
+                        <Input
+                            id="code"
+                            type="text"
+                            placeholder="Enter verification code"
+                            value={verificationCode}
+                            onChange={(e) => setVerificationCode(e.target.value)}
+                            disabled={isLoading}
+                        />
+                    </div>
+                    <Button
+                        onClick={handleLogin}
+                        disabled={!verificationCode || isLoading}
+                        className="w-full"
+                    >
+                        {isLoading ? "Connecting..." : "Connect"}
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
+}
+

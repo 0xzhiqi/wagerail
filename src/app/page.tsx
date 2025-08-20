@@ -1,32 +1,19 @@
+"use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { LoginDialog } from "@/components/LoginDialog";
+import Navbar from "@/components/Navbar";
 
 export default function Home() {
+  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-50">
-      {/* Navigation */}
-      <nav className="flex items-center justify-between pl-0 pr-6 pt-4 bg-slate-50 backdrop-blur-sm">
-        <a href="/" className="flex items-center">
-          <Image 
-            src="/logo.png" 
-            alt="Logo" 
-            width={80} 
-            height={80} 
-            className="cursor-pointer object-contain max-h-6"
-            priority
-          />
-        </a>
-        
-        <Button 
-          variant="outline" 
-          size="lg" 
-          className="border-purple-200 text-purple-600 hover:bg-purple-50 hover:text-purple-700 px-8 py-3 text-base font-semibold rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
-        >
-          Register
-        </Button>
-      </nav>
-
+      {/* Add Navbar with login dialog handler */}
+      <Navbar onRegisterClick={() => setIsLoginDialogOpen(true)} />
+      
       {/* Hero Section */}
       <section className="px-6 py-10 max-w-7xl mx-auto">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
@@ -47,6 +34,7 @@ export default function Home() {
             <Button 
               size="lg" 
               className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-8 py-6 text-lg font-semibold rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
+              onClick={() => setIsLoginDialogOpen(true)}
             >
               Get Started
             </Button>
@@ -73,10 +61,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           {/* Section Header */}
           <div className="text-center mb-16">
-            {/* <p className="text-purple-600 text-sm font-medium tracking-wider uppercase mb-4">Process</p> */}
             <p className="text-purple-600 text-2xl font-medium tracking-wider uppercase mb-4">How it works</p>
-
-            {/* <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">How It Works</h2> */}
             <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
               Simple steps to get your global payments flowing seamlessly
             </p>
@@ -170,9 +155,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           {/* Section Header */}
           <div className="text-center mb-16">
-            <p className="text-purple-600 text-2xl font-medium tracking-wider uppercase mb-4">Why Choose WageRail
-</p>
-            {/* <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">Why Choose WageRail</h2> */}
+            <p className="text-purple-600 text-2xl font-medium tracking-wider uppercase mb-4">Why Choose WageRail</p>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
               Experience the future of global payments
             </p>
@@ -266,34 +249,8 @@ export default function Home() {
             />
           </a>
           
-          {/* <div className="flex items-center justify-center space-x-2">
-            <span className="text-2xl font-bold text-purple-900">wage</span>
-            <span className="text-2xl font-bold text-purple-400">rail</span>
-          </div> */}
-          
           <div className="flex justify-center space-x-8 text-sm text-gray-600">
-            {/* <a href="#" className="hover:text-purple-600 transition-colors flex items-center space-x-2">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-              </svg>
-              <span>Learn</span>
-            </a>
-            <a href="#" className="hover:text-purple-600 transition-colors flex items-center space-x-2">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
-              </svg>
-              <span>Examples</span>
-            </a> */}
-            {/* <a href="#" className="hover:text-purple-600 transition-colors flex items-center space-x-2"> */}
-              {/* <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0 2 2 0 011.523-1.943A5.977 5.977 0 0116 10c0 .34-.028.675-.083 1H15a2 2 0 00-2 2v2.197A5.973 5.973 0 0110 16v-2a2 2 0 00-2-2 2 2 0 01-2-2 2 2 0 00-1.668-1.973z" clipRule="evenodd" />
-              </svg> */}
-              {/* <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
-              </svg>
-              <span>Start Now →</span> */}
-            {/* </a> */}
+            {/* Navigation links can be added here */}
           </div>
           
           <p className="text-xs text-gray-500">
@@ -301,6 +258,12 @@ export default function Home() {
           </p>
         </div>
       </footer>
+
+      {/* Login Dialog */}
+      <LoginDialog 
+        open={isLoginDialogOpen} 
+        onOpenChange={setIsLoginDialogOpen} 
+      />
     </div>
   );
 }
