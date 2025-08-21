@@ -1,0 +1,220 @@
+{
+  "_format": "hh-zkit-compile-cache-1",
+  "files": {
+    "/Users/zhiqi/Projects2/wagerail/circuits/registration.circom": {
+      "lastModificationDate": 1755738380475,
+      "contentHash": "49491b78e06ad0f555c47829bae7d68130ac0ab3",
+      "sourceName": "circuits/registration.circom",
+      "compileFlags": {
+        "r1cs": true,
+        "wasm": true,
+        "sym": true,
+        "json": false,
+        "c": false,
+        "O0": false,
+        "O1": true,
+        "O2": false
+      },
+      "fileData": {
+        "parsedFileData": {
+          "pragmaInfo": {
+            "isCustom": false,
+            "compilerVersion": "2.0.0"
+          },
+          "includes": [
+            "circomlib/circuits/poseidon.circom"
+          ],
+          "templates": {
+            "RegistrationCircuit": {
+              "parameters": [],
+              "isCustom": false,
+              "parallel": false
+            }
+          },
+          "mainComponentInfo": {
+            "templateName": "RegistrationCircuit",
+            "publicInputs": [],
+            "parameters": [],
+            "parsedInputs": {
+              "SenderPrivateKey": {
+                "type": "input",
+                "dimension": []
+              },
+              "SenderPublicKey": {
+                "type": "input",
+                "dimension": [
+                  2
+                ]
+              },
+              "SenderAddress": {
+                "type": "input",
+                "dimension": []
+              },
+              "ChainID": {
+                "type": "input",
+                "dimension": []
+              },
+              "RegistrationHash": {
+                "type": "input",
+                "dimension": []
+              },
+              "dummy": {
+                "type": "intermediate",
+                "dimension": []
+              },
+              "constraint": {
+                "type": "intermediate",
+                "dimension": []
+              }
+            }
+          }
+        },
+        "mainComponentData": {
+          "parameters": {},
+          "signals": [
+            {
+              "name": "SenderPrivateKey",
+              "dimension": [],
+              "type": "Input",
+              "visibility": "Private"
+            },
+            {
+              "name": "SenderPublicKey",
+              "dimension": [
+                2
+              ],
+              "type": "Input",
+              "visibility": "Private"
+            },
+            {
+              "name": "SenderAddress",
+              "dimension": [],
+              "type": "Input",
+              "visibility": "Private"
+            },
+            {
+              "name": "ChainID",
+              "dimension": [],
+              "type": "Input",
+              "visibility": "Private"
+            },
+            {
+              "name": "RegistrationHash",
+              "dimension": [],
+              "type": "Input",
+              "visibility": "Private"
+            }
+          ]
+        }
+      }
+    },
+    "/Users/zhiqi/Projects2/wagerail/node_modules/circomlib/circuits/poseidon.circom": {
+      "lastModificationDate": 1755734250861,
+      "contentHash": "cb25acd69894f71ce1aa01427dd1f9ce27523e3a",
+      "sourceName": "circomlib/circuits/poseidon.circom",
+      "compileFlags": {
+        "r1cs": true,
+        "wasm": true,
+        "sym": true,
+        "json": false,
+        "c": false,
+        "O0": false,
+        "O1": true,
+        "O2": false
+      },
+      "fileData": {
+        "parsedFileData": {
+          "pragmaInfo": {
+            "isCustom": false,
+            "compilerVersion": "2.0.0"
+          },
+          "includes": [
+            "./poseidon_constants.circom"
+          ],
+          "templates": {
+            "Sigma": {
+              "parameters": [],
+              "isCustom": false,
+              "parallel": false
+            },
+            "Ark": {
+              "parameters": [
+                "t",
+                "C",
+                "r"
+              ],
+              "isCustom": false,
+              "parallel": false
+            },
+            "Mix": {
+              "parameters": [
+                "t",
+                "M"
+              ],
+              "isCustom": false,
+              "parallel": false
+            },
+            "MixLast": {
+              "parameters": [
+                "t",
+                "M",
+                "s"
+              ],
+              "isCustom": false,
+              "parallel": false
+            },
+            "MixS": {
+              "parameters": [
+                "t",
+                "S",
+                "r"
+              ],
+              "isCustom": false,
+              "parallel": false
+            },
+            "PoseidonEx": {
+              "parameters": [
+                "nInputs",
+                "nOuts"
+              ],
+              "isCustom": false,
+              "parallel": false
+            },
+            "Poseidon": {
+              "parameters": [
+                "nInputs"
+              ],
+              "isCustom": false,
+              "parallel": false
+            }
+          }
+        }
+      }
+    },
+    "/Users/zhiqi/Projects2/wagerail/node_modules/circomlib/circuits/poseidon_constants.circom": {
+      "lastModificationDate": 1755734250845,
+      "contentHash": "f7454103a55c5e3e6f776275b7ecf05dec5c42ac",
+      "sourceName": "circomlib/circuits/poseidon_constants.circom",
+      "compileFlags": {
+        "r1cs": true,
+        "wasm": true,
+        "sym": true,
+        "json": false,
+        "c": false,
+        "O0": false,
+        "O1": true,
+        "O2": false
+      },
+      "fileData": {
+        "parsedFileData": {
+          "pragmaInfo": {
+            "isCustom": false,
+            "compilerVersion": "2.0.0"
+          },
+          "includes": [],
+          "templates": {}
+        }
+      }
+    }
+  }
+}

@@ -27,7 +27,7 @@ export const avalancheFork = defineChain({
         symbol: "AVAX",
         decimals: 18,
     },
-    rpc: "http://34.170.7.126:8545", // Changed from http://localhost:3000/api/rpc
+    rpc: "http://34.170.7.126:8545", 
     blockExplorers: [
         {
             name: "Fork Explorer",

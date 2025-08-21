@@ -1,0 +1,297 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+contract MonthlyPayroll is Ownable, ReentrancyGuard {
+    IERC20 public immutable usdc;
+    
+    struct Worker {
+        uint256 monthlySalary;
+        uint256 lastWithdrawMonth;
+        bool isActive;
+        uint256 startDate;
+    }
+    
+    mapping(address => Worker) public workers;
+    address[] public workersList;
+    
+    uint256 public totalMonthlySalaries;
+    uint256 public contractBalance;
+    
+    event WorkerAdded(address indexed worker, uint256 monthlySalary);
+    event WorkerUpdated(address indexed worker, uint256 newMonthlySalary);
+    event WorkerRemoved(address indexed worker);
+    event SalaryWithdrawn(address indexed worker, uint256 amount, uint256 month, uint256 year);
+    event FundsDeposited(address indexed depositor, uint256 amount);
+    event EmergencyWithdraw(address indexed owner, uint256 amount);
+    
+    modifier onlyActiveWorker() {
+        require(workers[msg.sender].isActive, "Not an active worker");
+        _;
+    }
+    
+    modifier validWorker(address _worker) {
+        require(_worker != address(0), "Invalid worker address");
+        _;
+    }
+    
+    constructor(address _usdcToken) {
+        require(_usdcToken != address(0), "Invalid USDC address");
+        usdc = IERC20(_usdcToken);
+    }
+    
+    /**
+     * @dev Add a new worker with monthly salary
+     * @param _worker Address of the worker
+     * @param _monthlySalary Monthly salary in USDC (with 6 decimals)
+     */
+    function addWorker(address _worker, uint256 _monthlySalary) 
+        external 
+        onlyOwner 
+        validWorker(_worker) 
+    {
+        require(_monthlySalary > 0, "Salary must be greater than 0");
+        require(!workers[_worker].isActive, "Worker already exists");
+        
+        workers[_worker] = Worker({
+            monthlySalary: _monthlySalary,
+            lastWithdrawMonth: getCurrentMonth() - 1, // Allow immediate first withdrawal
+            isActive: true,
+            startDate: block.timestamp
+        });
+        
+        workersList.push(_worker);
+        totalMonthlySalaries += _monthlySalary;
+        
+        emit WorkerAdded(_worker, _monthlySalary);
+    }
+    
+    /**
+     * @dev Update worker's monthly salary
+     * @param _worker Address of the worker
+     * @param _newMonthlySalary New monthly salary in USDC
+     */
+    function updateWorkerSalary(address _worker, uint256 _newMonthlySalary) 
+        external 
+        onlyOwner 
+        validWorker(_worker) 
+    {
+        require(workers[_worker].isActive, "Worker not found");
+        require(_newMonthlySalary > 0, "Salary must be greater than 0");
+        
+        uint256 oldSalary = workers[_worker].monthlySalary;
+        workers[_worker].monthlySalary = _newMonthlySalary;
+        
+        totalMonthlySalaries = totalMonthlySalaries - oldSalary + _newMonthlySalary;
+        
+        emit WorkerUpdated(_worker, _newMonthlySalary);
+    }
+    
+    /**
+     * @dev Remove a worker from payroll
+     * @param _worker Address of the worker to remove
+     */
+    function removeWorker(address _worker) external onlyOwner validWorker(_worker) {
+        require(workers[_worker].isActive, "Worker not found");
+        
+        totalMonthlySalaries -= workers[_worker].monthlySalary;
+        workers[_worker].isActive = false;
+        
+        // Remove from workers list
+        for (uint256 i = 0; i < workersList.length; i++) {
+            if (workersList[i] == _worker) {
+                workersList[i] = workersList[workersList.length - 1];
+                workersList.pop();
+                break;
+            }
+        }
+        
+        emit WorkerRemoved(_worker);
+    }
+    
+    /**
+     * @dev Deposit USDC into the contract
+     * @param _amount Amount of USDC to deposit
+     */
+    function depositFunds(uint256 _amount) external {
+        require(_amount > 0, "Amount must be greater than 0");
+        require(usdc.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
+        
+        contractBalance += _amount;
+        emit FundsDeposited(msg.sender, _amount);
+    }
+    
+    /**
+     * @dev Worker withdraws their monthly salary
+     */
+    function withdrawSalary() external onlyActiveWorker nonReentrant {
+        Worker storage worker = workers[msg.sender];
+        uint256 currentMonth = getCurrentMonth();
+        
+        require(currentMonth > worker.lastWithdrawMonth, "Salary already withdrawn this month");
+        require(isDayOfMonth(1), "Can only withdraw on the 1st of the month");
+        require(contractBalance >= worker.monthlySalary, "Insufficient contract balance");
+        
+        worker.lastWithdrawMonth = currentMonth;
+        contractBalance -= worker.monthlySalary;
+        
+        require(usdc.transfer(msg.sender, worker.monthlySalary), "Transfer failed");
+        
+        (uint256 month, uint256 year) = getMonthAndYear();
+        emit SalaryWithdrawn(msg.sender, worker.monthlySalary, month, year);
+    }
+    
+    /**
+     * @dev Check if worker can withdraw salary this month
+     * @param _worker Address of the worker
+     * @return bool Whether worker can withdraw
+     */
+    function canWithdraw(address _worker) external view returns (bool) {
+        if (!workers[_worker].isActive) return false;
+        
+        uint256 currentMonth = getCurrentMonth();
+        bool hasNotWithdrawnThisMonth = currentMonth > workers[_worker].lastWithdrawMonth;
+        bool isFirstOfMonth = isDayOfMonth(1);
+        bool hasSufficientBalance = contractBalance >= workers[_worker].monthlySalary;
+        
+        return hasNotWithdrawnThisMonth && isFirstOfMonth && hasSufficientBalance;
+    }
+    
+    /**
+     * @dev Get current month as a unique identifier (year * 12 + month)
+     * @return uint256 Current month identifier
+     */
+    function getCurrentMonth() public view returns (uint256) {
+        (uint256 month, uint256 year) = getMonthAndYear();
+        return year * 12 + month;
+    }
+    
+    /**
+     * @dev Get current month and year
+     * @return month Current month (1-12)
+     * @return year Current year
+     */
+    function getMonthAndYear() public view returns (uint256 month, uint256 year) {
+        uint256 timestamp = block.timestamp;
+        
+        // Calculate year (approximate, starts from 1970)
+        year = 1970 + timestamp / 365 days;
+        
+        // Adjust for leap years (rough approximation)
+        uint256 leapYears = (year - 1968) / 4;
+        year = 1970 + (timestamp - leapYears * 1 days) / 365 days;
+        
+        // Calculate start of year timestamp
+        uint256 yearStart = (year - 1970) * 365 days + ((year - 1969) / 4) * 1 days;
+        
+        // Calculate month
+        uint256 dayOfYear = (timestamp - yearStart) / 1 days + 1;
+        
+        uint256[12] memory daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        
+        // Adjust for leap year
+        if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) {
+            daysInMonth[1] = 29;
+        }
+        
+        month = 1;
+        for (uint256 i = 0; i < 12; i++) {
+            if (dayOfYear <= daysInMonth[i]) {
+                month = i + 1;
+                break;
+            }
+            dayOfYear -= daysInMonth[i];
+        }
+    }
+    
+    /**
+     * @dev Check if today is a specific day of the month
+     * @param _day Day to check (1-31)
+     * @return bool Whether today is the specified day
+     */
+    function isDayOfMonth(uint256 _day) public view returns (bool) {
+        uint256 timestamp = block.timestamp;
+        (uint256 month, uint256 year) = getMonthAndYear();
+        
+        // Calculate start of current month
+        uint256 yearStart = (year - 1970) * 365 days + ((year - 1969) / 4) * 1 days;
+        uint256[12] memory daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        
+        // Adjust for leap year
+        if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) {
+            daysInMonth[1] = 29;
+        }
+        
+        uint256 monthStart = yearStart;
+        for (uint256 i = 0; i < month - 1; i++) {
+            monthStart += daysInMonth[i] * 1 days;
+        }
+        
+        uint256 dayOfMonth = ((timestamp - monthStart) / 1 days) + 1;
+        return dayOfMonth == _day;
+    }
+    
+    /**
+     * @dev Get worker information
+     * @param _worker Address of the worker
+     * @return Worker struct data
+     */
+    function getWorkerInfo(address _worker) external view returns (Worker memory) {
+        return workers[_worker];
+    }
+    
+    /**
+     * @dev Get all active workers
+     * @return address[] Array of active worker addresses
+     */
+    function getActiveWorkers() external view returns (address[] memory) {
+        uint256 activeCount = 0;
+        for (uint256 i = 0; i < workersList.length; i++) {
+            if (workers[workersList[i]].isActive) {
+                activeCount++;
+            }
+        }
+        
+        address[] memory activeWorkers = new address[](activeCount);
+        uint256 index = 0;
+        for (uint256 i = 0; i < workersList.length; i++) {
+            if (workers[workersList[i]].isActive) {
+                activeWorkers[index] = workersList[i];
+                index++;
+            }
+        }
+        
+        return activeWorkers;
+    }
+    
+    /**
+     * @dev Get contract's USDC balance
+     * @return uint256 Current USDC balance
+     */
+    function getContractBalance() external view returns (uint256) {
+        return contractBalance;
+    }
+    
+    /**
+     * @dev Emergency withdrawal function for owner only
+     * @param _amount Amount to withdraw
+     */
+    function emergencyWithdraw(uint256 _amount) external onlyOwner {
+        require(_amount <= contractBalance, "Insufficient balance");
+        
+        contractBalance -= _amount;
+        require(usdc.transfer(owner(), _amount), "Transfer failed");
+        
+        emit EmergencyWithdraw(owner(), _amount);
+    }
+    
+    /**
+     * @dev Update contract balance (in case of direct transfers)
+     */
+    function updateBalance() external {
+        contractBalance = usdc.balanceOf(address(this));
+    }
+}

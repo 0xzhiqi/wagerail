@@ -1,0 +1,16 @@
+{
+  "_format": "hh-zkit-setup-cache-1",
+  "files": {
+    "/Users/zhiqi/Projects2/wagerail/zkit/artifacts/circuits/registration.circom/RegistrationCircuit_artifacts.json": {
+      "circuitSourceName": "circuits/registration.circom",
+      "r1csSourcePath": "/Users/zhiqi/Projects2/wagerail/zkit/artifacts/circuits/registration.circom/RegistrationCircuit.r1cs",
+      "provingSystemsData": [
+        {
+          "provingSystem": "groth16",
+          "lastR1CSFileHash": "f23de8e18903549415938f577c50d5a4f499aafc"
+        }
+      ],
+      "contributionsNumber": 2
+    }
+  }
+}

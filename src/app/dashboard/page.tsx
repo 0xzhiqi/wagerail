@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import { useActiveAccount, useConnect, useReadContract, useSendTransaction } from "thirdweb/react"
 import { useRouter } from "next/navigation"
@@ -29,12 +29,29 @@ import {
   Loader2
 } from "lucide-react"
 import { avalancheFork } from "@/config/chains"
-import { CONTRACT_ADDRESSES } from "@/config/contracts"
+import { CONTRACT_ADDRESSES, ENCRYPTED_ERC_ADDRESSES } from "@/config/contracts"
 import { thirdwebClient } from "@/config/thirdweb-client"
-import { prepareContractCall, getContract } from "thirdweb"
+import { prepareContractCall, getContract, readContract } from "thirdweb"
 import { waitForReceipt } from "thirdweb"
+// Add thirdweb viem adapter imports
+import { viemAdapter } from "thirdweb/adapters/viem"
+import { wallet } from "@/config/wallet"
 
+// Add crypto utilities for direct EERC interaction
+import { Base8, type Point, mulPointEscalar } from "@zk-kit/baby-jubjub"
+import {
+  formatPrivKeyForBabyJub,
+  genRandomBabyJubValue,
+  poseidonDecrypt,
+  poseidonEncrypt,
+} from "maci-crypto"
+import { randomBytes } from "crypto"
 
+// Import the complete EncryptedERC ABI
+import EncryptedERCArtifact from '@/config/EncryptedERC.json'
+
+// Use the complete ABI from the artifact with proper typing
+const ENCRYPTED_ERC_ABI = EncryptedERCArtifact.abi as any
 
 interface UserData {
   id?: string
@@ -79,6 +96,63 @@ export default function DashboardPage() {
     lastName: ""
   })
 
+  // Memoize client instances to prevent re-creation on every render
+  const publicClient = useMemo(() => {
+    return viemAdapter.publicClient.toViem({
+      client: thirdwebClient,
+      chain: avalancheFork as any,
+    })
+  }, [])
+
+  const walletClient = useMemo(() => {
+    if (!activeAccount || !wallet) return undefined
+    return viemAdapter.wallet.toViem({
+      wallet: wallet,
+      client: thirdwebClient,
+      chain: avalancheFork as any,
+    })
+  }, [activeAccount])
+  
+  // Add utility functions for direct EERC interaction
+  const BASE_POINT_ORDER = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617")
+
+  /**
+   * Generates a random nonce
+   * @returns A cryptographically secure random number
+   */
+  const randomNonce = (): bigint => {
+    const bytes = randomBytes(16)
+    // add 1 to make sure it's non-zero
+    return BigInt(`0x${bytes.toString("hex")}`) + 1n
+  }
+
+  /**
+   * Process Poseidon encryption for EERC
+   * @param inputs Input array to encrypt
+   * @param publicKey Public key
+   * @returns encryption components
+   */
+  const processPoseidonEncryption = (
+    inputs: bigint[],
+    publicKey: bigint[],
+  ) => {
+    const nonce = randomNonce()
+
+    let encRandom = genRandomBabyJubValue()
+    if (encRandom >= BASE_POINT_ORDER) {
+      encRandom = genRandomBabyJubValue() / 10n
+    }
+
+    const poseidonEncryptionKey = mulPointEscalar(
+      publicKey as Point<bigint>,
+      encRandom,
+    )
+    const authKey = mulPointEscalar(Base8, encRandom)
+    const ciphertext = poseidonEncrypt(inputs, poseidonEncryptionKey, nonce)
+
+    return { ciphertext, nonce, encRandom, poseidonEncryptionKey, authKey }
+  }
+
 
 
   // Wage groups state
@@ -92,10 +166,13 @@ export default function DashboardPage() {
   const [usdcBalance, setUsdcBalance] = useState<string>("0")
   const [depositStatus, setDepositStatus] = useState<'idle' | 'approving' | 'depositing' | 'success' | 'error'>('idle')
   const [depositMessage, setDepositMessage] = useState<string>('')
+  const [topUpVaultAddress, setTopUpVaultAddress] = useState<string | undefined>()
   
   // Add useSendTransaction hook for contract interactions
   const { mutate: sendTransaction } = useSendTransaction()
   
+
+
   // Create contract instances
   const usdcContract = getContract({
     address: CONTRACT_ADDRESSES.USDC as `0x${string}`,
@@ -109,6 +186,14 @@ export default function DashboardPage() {
     method: "function balanceOf(address account) view returns (uint256)",
     params: [activeAccount?.address || "0x0000000000000000000000000000000000000000"]
   })
+
+  if (!activeAccount) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <p className="text-lg text-gray-600">Please connect your wallet to view the dashboard.</p>
+      </div>
+    )
+  }
 
   // Update USDC balance when balanceData changes
   useEffect(() => {
@@ -151,23 +236,74 @@ export default function DashboardPage() {
         const { thirdwebClient } = await import("@/config/thirdweb-client")
 
         console.log("Attempting wallet auto-reconnect...")
+        
+        // First try to auto-connect
         await wallet.autoConnect({ client: thirdwebClient })
-
-        if (wallet.getAccount()) {
+        
+        // Check if wallet has an account after auto-connect
+        const account = wallet.getAccount()
+        if (account) {
+          console.log("Wallet account found:", account.address)
           await connect(async () => wallet)
           console.log("Wallet reconnected successfully")
+        } else {
+          console.log("No wallet account found after auto-connect")
+          // Optionally try to connect without auto-connect for in-app wallets
+          try {
+            await connect(async () => wallet)
+            const newAccount = wallet.getAccount()
+            if (newAccount) {
+              console.log("Wallet connected successfully:", newAccount.address)
+            }
+          } catch (connectError) {
+            console.log("Manual connect also failed:", connectError)
+          }
         }
       } catch (error) {
         console.log("Wallet auto-reconnect failed:", error)
+        // For in-app wallets, try a direct connection attempt
+        try {
+          const { wallet } = await import("@/config/wallet")
+          await connect(async () => wallet)
+          console.log("Direct wallet connection succeeded")
+        } catch (directError) {
+          console.log("Direct wallet connection also failed:", directError)
+        }
       } finally {
         setWalletReconnectAttempted(true)
       }
     }
 
+    // Add a small delay to ensure the page is fully loaded
     if (status !== "loading") {
-      attemptWalletReconnect()
+      const timer = setTimeout(() => {
+        attemptWalletReconnect()
+      }, 100)
+      
+      return () => clearTimeout(timer)
     }
   }, [status, connect, walletReconnectAttempted])
+
+  // Add an additional effect to retry connection if session is ready but no wallet
+  useEffect(() => {
+    const retryWalletConnection = async () => {
+      // Only retry if we have a session but no active account, and we've already attempted reconnect
+      if (session && !activeAccount && walletReconnectAttempted && status === "authenticated") {
+        console.log("Session found but no wallet connected, retrying...")
+        try {
+          const { wallet } = await import("@/config/wallet")
+          await connect(async () => wallet)
+          console.log("Retry wallet connection succeeded")
+        } catch (error) {
+          console.log("Retry wallet connection failed:", error)
+        }
+      }
+    }
+
+    // Add a delay before retrying
+    const timer = setTimeout(retryWalletConnection, 1000)
+    return () => clearTimeout(timer)
+  }, [session, activeAccount, walletReconnectAttempted, status, connect])
 
   useEffect(() => {
     if (status === "loading" || !walletReconnectAttempted) return
@@ -401,6 +537,25 @@ export default function DashboardPage() {
     setTopUpAmount('')
     setDepositStatus('idle')
     setDepositMessage('')
+    
+    // Fetch latest wallet balance when opening the dialog
+    if (activeAccount) {
+      refetchBalance()
+    }
+    
+    let vaultAddress = ""
+    switch (group.yieldSource) {
+      case "re7-labs":
+        vaultAddress = CONTRACT_ADDRESSES.VAULTS.VAULT_1
+        break
+      case "k3-capital":
+        vaultAddress = CONTRACT_ADDRESSES.VAULTS.VAULT_2
+        break
+      case "mev-capital-avalanche":
+        vaultAddress = CONTRACT_ADDRESSES.VAULTS.VAULT_3
+        break
+    }
+    setTopUpVaultAddress(vaultAddress || undefined)
     setTopUpDialogOpen(true)
   }
 
@@ -435,88 +590,68 @@ export default function DashboardPage() {
   }
 
   const handleDeposit = async () => {
-    if (!topUpWageGroup || !topUpWageGroup.yieldSource || !activeAccount || !userData) {
-      setDepositStatus('error')
-      setDepositMessage("Missing required information for deposit")
+    if (!activeAccount || !topUpWageGroup || !topUpAmount || !topUpVaultAddress) {
+      console.error('Missing required data for deposit')
       return
     }
-    
+
     const amount = parseFloat(topUpAmount)
-    if (isNaN(amount) || amount <= 0 || amount > parseFloat(usdcBalance)) {
-      setDepositStatus('error')
-      setDepositMessage("Invalid amount")
+    if (isNaN(amount) || amount <= 0) {
+      console.error('Invalid deposit amount')
       return
     }
-    
+
+    const vaultAddress = topUpVaultAddress
+    const amountInWei = BigInt(Math.floor(amount * 10**6)) // USDC has 6 decimals
+
+    console.log('=== STARTING DEPOSIT PROCESS ===')
+    console.log('Amount:', amount, 'USDC')
+    console.log('Amount in wei:', amountInWei.toString())
+    console.log('Vault address:', vaultAddress)
+    console.log('User address:', activeAccount.address)
+
     setIsDepositing(true)
     setDepositStatus('approving')
-    setDepositMessage('Preparing transaction...')
-    
+    setDepositMessage('Approving USDC spending...')
+
     try {
-      // Get vault address based on yield source
-      let vaultAddress = ""
-      switch (topUpWageGroup.yieldSource) {
-        case "re7-labs":
-          vaultAddress = CONTRACT_ADDRESSES.VAULTS.VAULT_1
-          break
-        case "k3-capital":
-          vaultAddress = CONTRACT_ADDRESSES.VAULTS.VAULT_2
-          break
-        case "mev-capital-avalanche":
-          vaultAddress = CONTRACT_ADDRESSES.VAULTS.VAULT_3
-          break
-        default:
-          setDepositStatus('error')
-          setDepositMessage("Invalid yield source")
-          setIsDepositing(false)
-          return
-      }
-      
-      // First approve USDC transfer
-      const amountInWei = BigInt(Math.floor(amount * 1000000)) // USDC has 6 decimals
-      
-      // Prepare approval transaction
-      const approvalTransaction = prepareContractCall({
+      // Step 1: Approve USDC spending
+      const approveTransaction = prepareContractCall({
         contract: usdcContract,
         method: "function approve(address spender, uint256 amount) returns (bool)",
         params: [vaultAddress as `0x${string}`, amountInWei]
       })
-      
-      setDepositMessage('Approving USDC transfer...')
-      
-      // Send approval transaction and wait for receipt
-      const approvalPromise = new Promise((resolve, reject) => {
-        sendTransaction(approvalTransaction, {
+
+      const approvePromise = new Promise((resolve, reject) => {
+        sendTransaction(approveTransaction, {
           onSuccess: async (result) => {
             try {
-              const receipt = await waitForReceipt({
-              client: thirdwebClient,
-              chain: avalancheFork,
-              transactionHash: result.transactionHash
-            })
-            resolve(receipt)
-          } catch (error) {
-            reject(error)
-          }
+              await waitForReceipt({
+                client: thirdwebClient,
+                chain: avalancheFork,
+                transactionHash: result.transactionHash
+              })
+              resolve(result)
+            } catch (error) {
+              reject(error)
+            }
           },
           onError: (error) => {
-            setDepositStatus('error')
-            setDepositMessage(`Approval failed: ${error.message}`)
             reject(error)
           }
         })
       })
-      
-      await approvalPromise
-      
-      // Create vault contract instance
+
+      await approvePromise
+      console.log('✅ USDC approval completed')
+
+      // Step 2: Deposit into vault
       const vaultContract = getContract({
-        address: vaultAddress as `0x${string}`,
+        client: thirdwebClient,
         chain: avalancheFork,
-        client: thirdwebClient
+        address: vaultAddress as `0x${string}`
       })
-      
-      // Prepare deposit transaction
+
       const depositTransaction = prepareContractCall({
         contract: vaultContract,
         method: "function deposit(uint256 amount, address receiver) returns (uint256)",
@@ -526,7 +661,6 @@ export default function DashboardPage() {
       setDepositStatus('depositing')
       setDepositMessage('Depositing USDC into vault...')
       
-      // Send deposit transaction
       const depositPromise = new Promise((resolve, reject) => {
         sendTransaction(depositTransaction, {
           onSuccess: async (result) => {
@@ -547,38 +681,33 @@ export default function DashboardPage() {
               // Parse the transaction logs to get the actual shares minted
               if (receipt.logs) {
                 for (const log of receipt.logs) {
-                  // Check if this log is from the vault contract
                   if (log.address?.toLowerCase() === vaultAddress.toLowerCase()) {
-                    // Try multiple common Deposit event signatures
                     const depositSignatures = [
-                      "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7", // Deposit(address,address,uint256,uint256)
-                      "0x90890809c654f11d6e72a28fa60149770a0d11ec6c92319d6ceb2bb0a4ea1a15", // Deposit(address,uint256,uint256)
-                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"  // Transfer(address,address,uint256)
+                      "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                      "0x90890809c654f11d6e72a28fa60149770a0d11ec6c92319d6ceb2bb0a4ea1a15",
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
                     ]
                     
                     if (log.topics[0] && depositSignatures.includes(log.topics[0])) {
                       console.log('Found potential deposit event')
                       
-                      // Try parsing data field
                       const eventData = log.data
                       if (eventData && eventData.length >= 66) {
                         try {
-                          // Method 1: Try parsing as assets + shares (64 + 64 chars)
                           if (eventData.length >= 130) {
-                            const sharesHex = eventData.slice(66, 130) // Skip 0x and first 64 chars
+                            const sharesHex = eventData.slice(66, 130)
                             const shares = BigInt("0x" + sharesHex)
-                            if (shares > 0) {
+                            if (shares > BigInt(0)) {
                               actualSharesReceived = shares
                               console.log('Parsed shares (method 1):', shares.toString())
                               break
                             }
                           }
                           
-                          // Method 2: Try parsing as single value (just shares)
                           if (eventData.length >= 66) {
-                            const sharesHex = eventData.slice(2, 66) // Skip 0x, take first 64 chars
+                            const sharesHex = eventData.slice(2, 66)
                             const shares = BigInt("0x" + sharesHex)
-                            if (shares > 0) {
+                            if (shares > BigInt(0)) {
                               actualSharesReceived = shares
                               console.log('Parsed shares (method 2):', shares.toString())
                               break
@@ -589,11 +718,10 @@ export default function DashboardPage() {
                         }
                       }
                       
-                      // Method 3: Try parsing from topics (for indexed parameters)
                       if (log.topics.length >= 4) {
                         try {
                           const shares = log.topics[3] ? BigInt(log.topics[3]) : BigInt(0)
-                          if (shares > 0) {
+                          if (shares > BigInt(0)) {
                             actualSharesReceived = shares
                             console.log('Parsed shares (method 3):', shares.toString())
                             break
@@ -607,25 +735,53 @@ export default function DashboardPage() {
                 }
               }
               
-              // If we still couldn't parse shares, use fallback calculation
               if (actualSharesReceived === BigInt(0)) {
-                console.log('Could not parse shares from events, trying balance-based calculation')
-                actualSharesReceived = amountInWei * BigInt(10**12) // Scale from 6 to 18 decimals
-                console.log('Using fallback shares calculation:', actualSharesReceived.toString())
+                throw new Error("Could not determine shares received from transaction logs. Deposit may have failed or event logs are not as expected.")
+              }
+
+              console.log('📊 Final shares calculation:', {
+                actualSharesReceived: actualSharesReceived.toString(),
+                type: typeof actualSharesReceived,
+                isPositive: actualSharesReceived > BigInt(0)
+              })
+              
+              // Convert shares from wei to human readable
+              let sharesReceivedHuman: number
+              try {
+                const VAULT_DECIMALS = 18
+                const divisor = BigInt("1000000000000000000") // 10^18 as BigInt literal
+
+                const quotient = actualSharesReceived / divisor
+                const remainder = actualSharesReceived % divisor
+
+                const remainderStr = remainder.toString().padStart(VAULT_DECIMALS, '0')
+                
+                let fullNumberStr = `${quotient}.${remainderStr}`
+                fullNumberStr = fullNumberStr.replace(/0+$/, '')
+                if (fullNumberStr.endsWith('.')) {
+                  fullNumberStr = fullNumberStr.slice(0, -1)
+                }
+
+                sharesReceivedHuman = parseFloat(fullNumberStr)
+
+                console.log('💰 Human readable conversion:', {
+                  actualSharesReceived: actualSharesReceived.toString(),
+                  fullNumberStr,
+                  result: sharesReceivedHuman
+                })
+                
+                if (isNaN(sharesReceivedHuman)) {
+                  throw new Error("Conversion to number resulted in NaN")
+                }
+
+              } catch (conversionError) {
+                console.error('❌ Human readable conversion failed:', conversionError)
+                throw new Error(`Failed to convert shares to human readable: ${conversionError instanceof Error ? conversionError.message : String(conversionError)}`)
               }
               
-              if (actualSharesReceived === BigInt(0)) {
-                setDepositStatus('error')
-                setDepositMessage("Vault deposit completed but shares data could not be parsed")
-                reject(new Error("Could not determine shares received"))
-                return
-              }
-              
-              // Convert shares from wei to human readable (vault shares use 6 decimals)
-              const sharesReceivedHuman = Number(actualSharesReceived) / 10**6
-              console.log('Vault shares received:', sharesReceivedHuman)
-              
-              // Step 3: Deposit vault shares into encrypted ERC contract
+              // Step 3: Direct encrypted ERC deposit
+              let encryptedDepositSuccess = false;
+              let depositId: string | undefined; // Declare depositId here to be accessible in catch block
               try {
                 setDepositStatus('depositing')
                 setDepositMessage('Depositing vault shares into encrypted contract...')
@@ -634,6 +790,10 @@ export default function DashboardPage() {
                 console.log('Depositing shares into encrypted ERC:', actualSharesReceived.toString())
                 
                 // First, save the vault deposit to get a depositId
+                if (!userData) {
+                  throw new Error('User data not available')
+                }
+                
                 const depositResponse = await fetch('/api/deposits', {
                   method: 'POST',
                   headers: {
@@ -654,20 +814,213 @@ export default function DashboardPage() {
                 }
                 
                 const depositData = await depositResponse.json()
-                const depositId = depositData.id
+                depositId = depositData.depositId
                 
-                // TODO: Implement actual encrypted ERC deposit here
-                // For now, we'll skip the encrypted ERC deposit until you implement the real logic
-                console.log('Vault deposit completed successfully. Encrypted ERC deposit to be implemented.')
+                // Get user's public key from Registrar contract
+                const registrarContract = getContract({
+                  client: thirdwebClient,
+                  chain: avalancheFork,
+                  address: ENCRYPTED_ERC_ADDRESSES.Registrar as `0x${string}`
+                })
                 
-                setDepositMessage(`Successfully deposited ${sharesReceivedHuman.toFixed(6)} vault shares!`)
+                // Check if user is registered for encrypted deposits
+                const isRegistered = await readContract({
+                  contract: registrarContract,
+                  method: "function isUserRegistered(address user) view returns (bool)",
+                  params: [activeAccount.address as `0x${string}`]
+                })
                 
-              } catch (encryptedError) {
-                console.error('Deposit process failed:', encryptedError)
-                setDepositMessage(`Deposit failed: ${encryptedError instanceof Error ? encryptedError.message : String(encryptedError)}`)
+                if (!isRegistered) {
+                  console.log('⚠️ User not registered for encrypted deposits - skipping EERC integration')
+                  
+                  // Update deposit status to indicate no encrypted deposit
+                  const updateResponse = await fetch('/api/deposits/update-status', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      depositId: depositId,
+                      encryptedErcStatus: 'skipped_not_registered',
+                      encryptedAmount: 0
+                    }),
+                  })
+
+                  if (!updateResponse.ok) {
+                    const errorText = await updateResponse.text()
+                    console.error('Failed to update deposit status:', errorText)
+                  }
+                  
+                  setDepositMessage(`Successfully deposited ${amount} USDC. (Encrypted deposit skipped)`)
+                } else {
+                  console.log('✅ User is registered - proceeding with encrypted deposit')
+                  
+                  // Get user's public key from Registrar contract
+                  const userPublicKey = await readContract({
+                    contract: registrarContract,
+                    method: "function getUserPublicKey(address user) view returns (uint256[2])",
+                    params: [activeAccount.address as `0x${string}`]
+                  })
+                  
+                  console.log('🔑 User public key:', [userPublicKey[0].toString(), userPublicKey[1].toString()])
+                  
+                  // Generate amountPCT for auditing
+                  console.log('🔐 Generating amountPCT for auditing...')
+                  const depositAmountBigInt = actualSharesReceived
+                  const publicKeyBigInt = [BigInt(userPublicKey[0].toString()), BigInt(userPublicKey[1].toString())]
+                  
+                  const {
+                    ciphertext: amountCiphertext,
+                    nonce: amountNonce,
+                    authKey: amountAuthKey,
+                  } = processPoseidonEncryption([depositAmountBigInt], publicKeyBigInt)
+                  
+                  // Format amountPCT as BigInt array (not string array)
+                  const amountPCT = [
+                    ...amountCiphertext,
+                    ...amountAuthKey,
+                    amountNonce
+                  ] as [bigint, bigint, bigint, bigint, bigint, bigint, bigint]
+                  
+                  console.log('✅ AmountPCT generated successfully')
+                  
+                  // Get the encrypted ERC contract
+                  const encryptedERCContract = getContract({
+                    client: thirdwebClient,
+                    chain: avalancheFork,
+                    address: ENCRYPTED_ERC_ADDRESSES.EncryptedERC as `0x${string}`,
+                    abi: ENCRYPTED_ERC_ABI // Add the ABI here
+                  })
+                  
+                  // First approve the encrypted ERC contract to spend vault shares
+                  console.log('🔓 Approving encrypted ERC contract to spend vault shares...')
+                  const approveCall = prepareContractCall({
+                    contract: vaultContract,
+                    method: "function approve(address spender, uint256 amount) external returns (bool)",
+                    params: [ENCRYPTED_ERC_ADDRESSES.EncryptedERC as `0x${string}`, actualSharesReceived]
+                  })
+                  
+                  // Use the existing hook-based pattern
+                  const approvePromise = new Promise((resolve, reject) => {
+                    sendTransaction(approveCall, {
+                      onSuccess: async (result) => {
+                        try {
+                          await waitForReceipt({
+                            client: thirdwebClient,
+                            chain: avalancheFork,
+                            transactionHash: result.transactionHash
+                          })
+                          resolve(result)
+                        } catch (error) {
+                          reject(error)
+                        }
+                      },
+                      onError: (error) => {
+                        reject(error)
+                      }
+                    })
+                  })
+
+                  await approvePromise
+                  console.log('✅ Approval confirmed')
+                  
+                  // Perform the encrypted deposit
+                  console.log('💾 Depositing vault shares into EncryptedERC...')
+                  const encryptedDepositCall = prepareContractCall({
+                    contract: encryptedERCContract,
+                    method: "function deposit(uint256 amount, address token, uint256[7] calldata amountPCT) external",
+                    params: [
+                      actualSharesReceived,
+                      vaultContract.address as `0x${string}`,
+                      amountPCT // Keep as BigInt array
+                    ]
+                  })
+                  
+                  // Use the existing hook-based pattern
+                  const encryptedDepositPromise = new Promise((resolve, reject) => {
+                    sendTransaction(encryptedDepositCall, {
+                      onSuccess: async (result) => {
+                        try {
+                          const receipt = await waitForReceipt({
+                            client: thirdwebClient,
+                            chain: avalancheFork,
+                            transactionHash: result.transactionHash
+                          })
+                          // Only pass the transaction result - don't try to pass depositId
+                          resolve({ result })
+                        } catch (error) {
+                          reject(error)
+                        }
+                      },
+                      onError: (error) => {
+                        reject(error)
+                      }
+                    })
+                  })
+
+                  // Only destructure the result, not depositId
+                  const { result: encryptedDepositResult } = await encryptedDepositPromise as any
+                  console.log('✅ Encrypted deposit transaction confirmed')
+                  console.log('🔍 Debug - Using depositId from database:', depositId)
+                  console.log('🔍 Debug - Shares amount:', sharesReceivedHuman)
+                  
+                  // Update deposit status in database using the depositId from broader scope
+                  const updateResponse = await fetch('/api/deposits/update-status', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      depositId: depositId, // Use the depositId from the database save operation
+                      encryptedErcStatus: 'completed',
+                      encryptedAmount: sharesReceivedHuman, // Make sure this is the correct shares amount
+                      encryptedTxHash: encryptedDepositResult.transactionHash
+                    }),
+                  })
+
+                  if (!updateResponse.ok) {
+                    const errorText = await updateResponse.text()
+                    console.error('Failed to update deposit status:', errorText)
+                    console.error('🔍 Debug - depositId sent:', depositId)
+                    console.error('🔍 Debug - encryptedAmount sent:', sharesReceivedHuman)
+                  } else {
+                    console.log('✅ Database update successful')
+                  }
+                  
+                  encryptedDepositSuccess = true;
+                  setDepositMessage(`Successfully deposited ${amount} USDC.`)
+                }
+                
+              } catch (encryptedError: any) {
+                console.error('❌ EERC integration failed:', encryptedError)
+                const errorMessage = encryptedError instanceof Error ? encryptedError.message : String(encryptedError)
+                
+                // Still show success for vault deposit even if EERC fails
+                setDepositMessage(`Successfully deposited ${amount} USDC. (Encrypted deposit failed)`)
+
+                // Update deposit status to 'failed' in the database
+                if (depositId) {
+                  const updateResponse = await fetch('/api/deposits/update-status', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      depositId: depositId,
+                      encryptedErcStatus: 'failed',
+                      encryptedAmount: 0,
+                      failureReason: errorMessage
+                    }),
+                  })
+
+                  if (!updateResponse.ok) {
+                    const errorText = await updateResponse.text()
+                    console.error('Failed to update deposit status after EERC failure:', errorText)
+                  }
+                }
               }
               
-              // Show success message
+              // Always show success for the vault deposit
               setDepositStatus('success')
               
               // Wait 3 seconds before closing dialog
@@ -683,38 +1036,32 @@ export default function DashboardPage() {
               
             } catch (error) {
               setDepositStatus('error')
-              setDepositMessage(`Failed to complete deposit: ${error instanceof Error ? error.message : String(error)}`)
+              const errorMessage = error instanceof Error ? error.message : String(error)
+              setDepositMessage(`Deposit failed: ${errorMessage}`)
+              console.error('❌ Deposit failed:', error)
               reject(error)
             }
           },
           onError: (error) => {
             setDepositStatus('error')
-            setDepositMessage(`Deposit transaction failed: ${error.message}`)
+            const errorMessage = error instanceof Error ? error.message : String(error)
+            setDepositMessage(`Deposit failed: ${errorMessage}`)
+            console.error('❌ Deposit transaction failed:', error)
             reject(error)
           }
         })
       })
-      
+
       await depositPromise
       
     } catch (error) {
-      console.error("Deposit error:", error)
-      if (depositStatus !== 'error') {
-        setDepositStatus('error')
-        setDepositMessage("Failed to deposit: " + (error instanceof Error ? error.message : String(error)))
-      }
+      setDepositStatus('error')
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setDepositMessage(`Deposit failed: ${errorMessage}`)
+      console.error('❌ Deposit process failed:', error)
     } finally {
       setIsDepositing(false)
-      
-      // Always refresh balance after deposit attempt
-      setTimeout(async () => {
-        try {
-          await refetchBalance()
-          console.log("Balances refreshed after deposit")
-        } catch (error) {
-          console.error("Failed to refresh balances:", error)
-        }
-      }, 2000)
+      refetchBalance()
     }
   }
 
@@ -1209,7 +1556,8 @@ export default function DashboardPage() {
                 )}
               </div>
             )}
-          </div>
+
+</div>
           
           <DialogFooter>
             <Button 

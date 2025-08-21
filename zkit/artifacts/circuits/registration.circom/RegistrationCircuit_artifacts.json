@@ -1,0 +1,66 @@
+{
+  "_format": "hh-zkit-artifacts-1",
+  "circuitTemplateName": "RegistrationCircuit",
+  "circuitFileName": "registration",
+  "circuitSourceName": "circuits/registration.circom",
+  "baseCircuitInfo": {
+    "constraintsNumber": 607,
+    "signals": [
+      {
+        "name": "SenderPrivateKey",
+        "dimension": [],
+        "type": "Input",
+        "visibility": "Private"
+      },
+      {
+        "name": "SenderPublicKey",
+        "dimension": [
+          2
+        ],
+        "type": "Input",
+        "visibility": "Private"
+      },
+      {
+        "name": "SenderAddress",
+        "dimension": [],
+        "type": "Input",
+        "visibility": "Private"
+      },
+      {
+        "name": "ChainID",
+        "dimension": [],
+        "type": "Input",
+        "visibility": "Private"
+      },
+      {
+        "name": "RegistrationHash",
+        "dimension": [],
+        "type": "Input",
+        "visibility": "Private"
+      }
+    ],
+    "parameters": {}
+  },
+  "compilerOutputFiles": {
+    "r1cs": {
+      "fileSourcePath": "/Users/zhiqi/Projects2/wagerail/zkit/artifacts/circuits/registration.circom/RegistrationCircuit.r1cs",
+      "fileHash": "f23de8e18903549415938f577c50d5a4f499aafc"
+    },
+    "wasm": {
+      "fileSourcePath": "/Users/zhiqi/Projects2/wagerail/zkit/artifacts/circuits/registration.circom/RegistrationCircuit_js/RegistrationCircuit.wasm",
+      "fileHash": "2c1612e0e77decf5a00d909c0658b3968c1c0005"
+    },
+    "sym": {
+      "fileSourcePath": "/Users/zhiqi/Projects2/wagerail/zkit/artifacts/circuits/registration.circom/RegistrationCircuit.sym",
+      "fileHash": "800ea0f7c2702602500439a1712833bd09b50942"
+    },
+    "groth16.zkey": {
+      "fileSourcePath": "/Users/zhiqi/Projects2/wagerail/zkit/artifacts/circuits/registration.circom/RegistrationCircuit.groth16.zkey",
+      "fileHash": "3c72e5f320bf67cf75a82391ff4b73c7846e484b"
+    },
+    "groth16.vkey": {
+      "fileSourcePath": "/Users/zhiqi/Projects2/wagerail/zkit/artifacts/circuits/registration.circom/RegistrationCircuit.groth16.vkey.json",
+      "fileHash": "80c72a97cd01341cf1ff121e440081333e0dd87b"
+    }
+  }
+}
