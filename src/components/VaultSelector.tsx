@@ -40,7 +40,7 @@ export function VaultSelector({ selectedVault, onVaultSelect }: VaultSelectorPro
       url: "https://app.euler.finance/vault/0x6fC9b3a52944A577cd8971Fd8fDE0819001bC595?network=avalanche"
     },
     "mev-capital-avalanche": {
-      name: "MEV Capital Avalanche",
+      name: "MEV Capital",
       description: "Euler Finance vault",
       url: "https://app.euler.finance/vault/0x69B07dB605d0A08fbE9245c1466880AA36c8E1A7?network=avalanche"
     }
