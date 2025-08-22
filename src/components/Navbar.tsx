@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 
 interface NavbarProps {
   onRegisterClick?: () => void;
+  showDashboard?: boolean;
 }
 
-export default function Navbar({ onRegisterClick }: NavbarProps) {
+export default function Navbar({ onRegisterClick, showDashboard }: NavbarProps) {
   return (
     <nav className="flex items-center justify-between pl-0 pr-6 pt-4 bg-slate-50 backdrop-blur-sm">
       <a href="/" className="flex items-center">
@@ -25,7 +26,7 @@ export default function Navbar({ onRegisterClick }: NavbarProps) {
         className="border-purple-200 text-purple-600 hover:bg-purple-50 hover:text-purple-700 px-8 py-3 text-base font-semibold rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
         onClick={onRegisterClick}
       >
-        Register
+        {showDashboard ? "Dashboard" : "Register"}
       </Button>
     </nav>
   );

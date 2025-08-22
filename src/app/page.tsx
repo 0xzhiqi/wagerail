@@ -2,17 +2,37 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
+import { useActiveAccount } from "thirdweb/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { LoginDialog } from "@/components/LoginDialog";
 import Navbar from "@/components/Navbar";
 
 export default function Home() {
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
+  const { data: session } = useSession();
+  const activeAccount = useActiveAccount();
+  const router = useRouter();
+
+  // Check if user is authenticated and has wallet connected
+  const isAuthenticatedWithWallet = session && activeAccount;
+
+  const handleButtonClick = () => {
+    if (isAuthenticatedWithWallet) {
+      router.push("/dashboard");
+    } else {
+      setIsLoginDialogOpen(true);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-50">
-      {/* Add Navbar with login dialog handler */}
-      <Navbar onRegisterClick={() => setIsLoginDialogOpen(true)} />
+      {/* Add Navbar with conditional button handler */}
+      <Navbar 
+        onRegisterClick={handleButtonClick}
+        showDashboard={!!isAuthenticatedWithWallet}
+      />
       
       {/* Hero Section */}
       <section className="px-6 py-10 max-w-7xl mx-auto">
@@ -34,9 +54,9 @@ export default function Home() {
             <Button 
               size="lg" 
               className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-8 py-6 text-lg font-semibold rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
-              onClick={() => setIsLoginDialogOpen(true)}
+              onClick={handleButtonClick}
             >
-              Get Started
+              {isAuthenticatedWithWallet ? "Dashboard" : "Get Started"}
             </Button>
           </div>
 

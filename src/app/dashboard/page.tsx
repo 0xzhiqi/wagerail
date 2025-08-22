@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import { useActiveAccount, useConnect, useReadContract, useSendTransaction } from "thirdweb/react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,6 +13,7 @@ import { UserInfoCard } from "@/components/UserInfoCard"
 import { WagePaymentsCard } from "@/components/WagePaymentsCard"
 import { WageGroupCreateDialog } from "@/components/WageGroupCreateDialog"
 import { VaultSelector } from "@/components/VaultSelector"
+import { WageReceiptsCard } from "@/components/WageReceiptsCard"
 import { WageGroupForm, Payee } from "@/types/wage"
 import { 
   Wallet, 
@@ -157,6 +159,7 @@ export default function DashboardPage() {
 
   // Wage groups state
   const [wageGroups, setWageGroups] = useState<WageGroup[]>([])
+  const [payeeRecords, setPayeeRecords] = useState<any[]>([])
   const [wageDialogOpen, setWageDialogOpen] = useState(false)
   const [editWageDialogOpen, setEditWageDialogOpen] = useState(false)
   const [topUpDialogOpen, setTopUpDialogOpen] = useState(false)
@@ -323,6 +326,7 @@ export default function DashboardPage() {
     console.log("Session found - fetching user data")
     fetchUserData()
     fetchWageGroups()
+    fetchPayeeRecords()
   }, [session, activeAccount, status, router, walletReconnectAttempted])
 
   const fetchUserData = async () => {
@@ -363,6 +367,38 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("Error fetching wage groups:", error)
     }
+  }
+
+  const fetchPayeeRecords = async () => {
+    try {
+      const response = await fetch(`/api/payee/payments?t=${Date.now()}`, {
+        cache: 'no-store'
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setPayeeRecords(data)
+        console.log("Payee records refreshed:", data.length, "records found")
+      } else {
+        console.error("Failed to fetch payee records")
+      }
+    } catch (error) {
+      console.error("Error fetching payee records:", error)
+    }
+  }
+
+  const openPayeeWageDetails = (record: any) => {
+    // Convert payee record to wage group format for the dialog
+    setSelectedWageGroup({
+      id: record.wageGroup.id,
+      name: record.wageGroup.name,
+      startDate: record.wageGroup.startDate,
+      paymentDate: record.wageGroup.paymentDate,
+      yieldSource: record.wageGroup.yieldSource,
+      isActive: record.wageGroup.isActive,
+      payees: []
+    })
+    // You'll need to add a wage details dialog state if it doesn't exist
+    // setWageDetailsDialogOpen(true)
   }
 
   const handleUpdateNames = async () => {
@@ -1080,11 +1116,18 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-violet-50/20">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-purple-100/50 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-violet-600 bg-clip-text text-transparent">
-              Dashboard
-            </h1>
+        <div className="max-w-7xl mx-auto pl-0 pr-6 pt-4 pb-4">
+          <div className="flex justify-between items-center">
+            <a href="/" className="flex items-center">
+              <Image 
+                src="/logo.png" 
+                alt="Logo" 
+                width={80} 
+                height={80} 
+                className="cursor-pointer object-contain max-h-6"
+                priority
+              />
+            </a>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-purple-600/70">Welcome back!</span>
               <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-lg">
@@ -1116,6 +1159,14 @@ export default function DashboardPage() {
             openCreateDialog={openCreateDialog}
             openEditWageGroup={openEditWageGroup}
             openTopUpDialog={openTopUpDialog}
+          />
+        </div>
+
+        {/* Wage Receipts Card */}
+        <div className="mb-8">
+          <WageReceiptsCard 
+            payeeRecords={payeeRecords}
+            openPayeeWageDetails={openPayeeWageDetails}
           />
         </div>
 

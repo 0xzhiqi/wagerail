@@ -95,7 +95,7 @@ export function WageGroupCreateDialog({
               id="name"
               value={formData.name}
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="e.g., Development Team Q1"
+              placeholder="e.g. Development Team Q1"
               className="border-purple-200 focus:border-purple-400 focus:ring-purple-400"
             />
           </div>
@@ -121,7 +121,7 @@ export function WageGroupCreateDialog({
                 max="31"
                 value={formData.paymentDate}
                 onChange={(e) => setFormData(prev => ({ ...prev, paymentDate: e.target.value }))}
-                placeholder="e.g., 15"
+                placeholder="e.g. 15"
                 className="border-purple-200 focus:border-purple-400 focus:ring-purple-400"
               />
             </div>

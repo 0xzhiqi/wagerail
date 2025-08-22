@@ -99,6 +99,22 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     }
   };
 
+  // Add handler for Enter key press on email input
+  const handleEmailKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !isOtpSent && email && !isLoading) {
+      e.preventDefault();
+      sendOtp();
+    }
+  };
+
+  // Add handler for Enter key press on verification code input
+  const handleCodeKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && isOtpSent && verificationCode && !isLoading) {
+      e.preventDefault();
+      handleLogin();
+    }
+  };
+
   const handleLogin = async () => {
     if (!email || !verificationCode) return;
 
@@ -235,7 +251,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-gradient-to-br from-slate-50 to-purple-50 border-purple-100 shadow-2xl" hideCloseButton>
+      <DialogContent className="sm:max-w-md bg-gradient-to-br from-slate-50 to-purple-50 shadow-2xl" hideCloseButton>
         <DialogHeader className="text-center space-y-3">
           <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text text-transparent">
             Welcome to WageRail
@@ -255,6 +271,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
               placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onKeyPress={handleEmailKeyPress}
               disabled={isLoading}
               className="border-purple-200 focus:border-purple-400 focus:ring-purple-400 rounded-xl px-4 py-3 bg-white/80 backdrop-blur-sm"
             />
@@ -287,6 +304,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
                   placeholder="Enter verification code"
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value)}
+                  onKeyPress={handleCodeKeyPress}
                   disabled={isLoading}
                   className="border-purple-200 focus:border-purple-400 focus:ring-purple-400 rounded-xl px-4 py-3 bg-white/80 backdrop-blur-sm text-center text-sm tracking-widest"
                 />
