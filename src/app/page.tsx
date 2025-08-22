@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { LoginDialog } from "@/components/LoginDialog";
 import Navbar from "@/components/Navbar";
+import { ExternalLink } from "lucide-react";
 
 export default function Home() {
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
@@ -91,13 +92,13 @@ export default function Home() {
         <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
           {/* Step 1 */}
           <div className="group">
-            <div className="lg:min-h-[368px] relative bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl p-8 mb-6 transition-all duration-300 hover:shadow-lg hover:shadow-purple-100/50">
+            <div className="lg:min-h-[400px] relative bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl p-8 mb-6 transition-all duration-300 hover:shadow-lg hover:shadow-purple-100/50">
               <div className="absolute top-4 right-4 w-8 h-8 bg-purple-200/60 rounded-full"></div>
               <div className="absolute bottom-4 left-4 w-4 h-4 bg-indigo-200/60 rounded-full"></div>
               
-              <div className="flex items-center justify-center h-32">
-                <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <svg className="w-12 h-12 text-white" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+              <div className="flex items-center justify-center h-40">
+                <div className="w-28 h-28 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <svg className="w-20 h-20 text-white" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
                     {/* Gradient definitions */}
                     <defs>
                       <linearGradient id="purpleGradient1" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -136,10 +137,14 @@ export default function Home() {
                 </div>
               </div>
               
-              <div className="text-center space-y-4">
-                <div className="inline-flex items-center justify-center w-8 h-8 bg-purple-100 text-purple-600 rounded-full text-sm font-bold mb-2">
-                  1
+              {/* Step number below image, centered */}
+              <div className="flex justify-center mt-4 mb-4">
+                <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                  <span className="text-white font-bold text-sm">1</span>
                 </div>
+              </div>
+              
+              <div className="text-center space-y-4">
                 <h3 className="text-xl font-semibold text-gray-900">Create Payment Group</h3>
                 <p className="text-gray-600 leading-relaxed">
                   Add workers via email and indicate how much to pay them monthly
@@ -150,13 +155,13 @@ export default function Home() {
 
           {/* Step 2 */}
           <div className="group">
-            <div className="lg:min-h-[368px] relative bg-gradient-to-br from-indigo-50 to-blue-50 rounded-2xl p-8 mb-6 transition-all duration-300 hover:shadow-lg hover:shadow-indigo-100/50">
+            <div className="lg:min-h-[400px] relative bg-gradient-to-br from-indigo-50 to-blue-50 rounded-2xl p-8 mb-6 transition-all duration-300 hover:shadow-lg hover:shadow-indigo-100/50">
               <div className="absolute top-4 right-4 w-6 h-6 bg-indigo-200/60 rounded-full"></div>
               <div className="absolute bottom-4 left-4 w-5 h-5 bg-blue-200/60 rounded-full"></div>
               
-              <div className="flex items-center justify-center h-32">
-                <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <svg className="w-12 h-12 text-white" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+              <div className="flex items-center justify-center h-40">
+                <div className="w-28 h-28 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <svg className="w-20 h-20 text-white" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
                     {/* Gradient definitions */}
                     <defs>
                       <linearGradient id="indigoGradient2" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -190,20 +195,32 @@ export default function Home() {
                     
                     {/* Yield percentage indicator */}
                     <g transform="translate(20, 18)" fill="white" opacity="0.8">
-                      <rect x="0" y="0" width="16" height="8" rx="2" fill="rgba(255,255,255,0.2)" stroke="white" strokeWidth="0.5"/>
+                      <rect x="0" y="0" width="20" height="8" rx="2" fill="rgba(255,255,255,0.2)" stroke="white" strokeWidth="0.5"/>
                       <text x="8" y="5.5" textAnchor="middle" fontFamily="Arial, sans-serif" fontSize="4" fontWeight="bold" fill="white">60% APY</text>
                     </g>
                   </svg>
                 </div>
               </div>
               
-              <div className="text-center space-y-4">
-                <div className="inline-flex items-center justify-center w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full text-sm font-bold mb-2">
-                  2
+              {/* Step number below image, centered */}
+              <div className="flex justify-center mt-4 mb-4">
+                <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center shadow-lg">
+                  <span className="text-white font-bold text-sm">2</span>
                 </div>
+              </div>
+              
+              <div className="text-center space-y-4">
                 <h3 className="text-xl font-semibold text-gray-900">Add Funds</h3>
                 <p className="text-gray-600 leading-relaxed">
-                  Transfer USDC into your account with the option to earn yields up to 60% APY
+                  Transfer USDC into your account with the option to earn yields up to{" "}
+                  <span className="inline-flex items-center gap-1">
+                    60% APY
+                    <ExternalLink 
+                      size={14} 
+                      className="text-indigo-500 hover:text-indigo-700 cursor-pointer transition-colors" 
+                      onClick={() => window.open('https://app.avantprotocol.com/products', '_blank')}
+                    />
+                  </span>
                 </p>
               </div>
             </div>
@@ -211,13 +228,13 @@ export default function Home() {
 
           {/* Step 3 */}
           <div className="group">
-            <div className="relative bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-8 mb-6 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-100/50">
+            <div className="lg:min-h-[400px] relative bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-8 mb-6 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-100/50">
               <div className="absolute top-4 right-4 w-7 h-7 bg-emerald-200/60 rounded-full"></div>
               <div className="absolute bottom-4 left-4 w-3 h-3 bg-teal-200/60 rounded-full"></div>
               
-              <div className="flex items-center justify-center h-32">
-                <div className="w-20 h-20 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <svg className="w-12 h-12 text-white" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+              <div className="flex items-center justify-center h-40">
+                <div className="w-28 h-28 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <svg className="w-20 h-20 text-white" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
                     {/* Gradient definitions */}
                     <defs>
                       <linearGradient id="emeraldGradient3" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -296,10 +313,14 @@ export default function Home() {
                 </div>
               </div>
               
-              <div className="text-center space-y-4">
-                <div className="inline-flex items-center justify-center w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full text-sm font-bold mb-2">
-                  3
+              {/* Step number below image, centered */}
+              <div className="flex justify-center mt-4 mb-4">
+                <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+                  <span className="text-white font-bold text-sm">3</span>
                 </div>
+              </div>
+              
+              <div className="text-center space-y-4">
                 <h3 className="text-xl font-semibold text-gray-900">Automated Transfers</h3>
                 <p className="text-gray-600 leading-relaxed">
                   On the salary payment date you set, your workers' salaries will be automatically transferred to them

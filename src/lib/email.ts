@@ -69,7 +69,7 @@ export async function sendWageGroupInvitation({
                     
                     <p>To view your payment schedule and manage your account, please create an account on our platform:</p>
                     
-                    <a href="https://volonly.com" class="button" style="color: #ffffff !important;">Create Account & View Payments</a>
+                    <a href="https://wagerail.com" class="button" style="color: #ffffff !important;">Create Account & View Payments</a>
                     
                     <p>Once you create an account with this email address (${recipientEmail}), you'll automatically be linked to this wage group and can view your payment schedule.</p>
                     
