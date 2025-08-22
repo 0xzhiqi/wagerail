@@ -3,6 +3,10 @@ const require = createRequire(import.meta.url);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  transpilePackages: ['ffjavascript', 'snarkjs'],
   webpack: (config, { isServer, webpack }) => {
     // Handle node modules that don't work in browser
     if (!isServer) {

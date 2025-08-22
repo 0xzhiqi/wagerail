@@ -74,7 +74,7 @@ export function UserInfoCard({ userData, activeAccount, openEditDialog, getDispl
         <div className="space-y-3">
           <Label className="text-sm font-semibold text-purple-700">Wallet Address</Label>
           <div className="bg-white/60 rounded-lg p-3 border border-purple-100/50">
-            <p className="text-sm text-gray-900 break-all font-mono">
+            <p className="text-sm text-gray-900 break-all">
               {activeAccount?.address || "Not connected"}
             </p>
           </div>
