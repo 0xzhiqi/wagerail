@@ -11,7 +11,7 @@ import { WageGroup } from "@/types/wage"
 import { avalancheFork } from "@/config/chains"
 import { CONTRACT_ADDRESSES, ENCRYPTED_ERC_ADDRESSES } from "@/config/contracts"
 import { thirdwebClient } from "@/config/thirdweb-client"
-import { prepareContractCall, getContract, waitForReceipt } from "thirdweb"
+import { prepareContractCall, getContract, waitForReceipt, readContract } from "thirdweb"
 import { useEERC } from '@avalabs/eerc-sdk'
 import { viemAdapter } from "thirdweb/adapters/viem"
 import { wallet } from "@/config/wallet"
@@ -132,6 +132,19 @@ export function TopUpDialog({ isOpen, onClose, wageGroup, onSuccess }: TopUpDial
     const amountInWei = BigInt(Math.floor(amount * 10**6))
 
     try {
+      setDepositMessage('Estimating vault shares...')
+      const vaultContract = getContract({ address: vaultAddress, chain: avalancheFork, client: thirdwebClient })
+      const expectedShares = await readContract({
+        contract: vaultContract,
+        method: "function previewDeposit(uint256 assets) view returns (uint256)",
+        params: [amountInWei]
+      })
+
+      if (expectedShares === BigInt(0)) {
+        throw new Error("Preview deposit returned 0 shares. Deposit would likely fail.")
+      }
+      toast.info(`Estimated vault shares: ${expectedShares.toString()}`)
+
       // 1. Approve USDC transfer
       setDepositMessage('Approving USDC transfer...')
       const approvalTx = prepareContractCall({
@@ -148,7 +161,6 @@ export function TopUpDialog({ isOpen, onClose, wageGroup, onSuccess }: TopUpDial
       // 2. Deposit USDC into Vault
       setDepositStatus('depositing')
       setDepositMessage('Depositing USDC into vault...')
-      const vaultContract = getContract({ address: vaultAddress, chain: avalancheFork, client: thirdwebClient })
       const depositTx = prepareContractCall({
         contract: vaultContract,
         method: "function deposit(uint256 assets, address receiver) returns (uint256 shares)",
@@ -160,26 +172,8 @@ export function TopUpDialog({ isOpen, onClose, wageGroup, onSuccess }: TopUpDial
       const finalDepositReceipt = await waitForReceipt({ client: thirdwebClient, chain: avalancheFork, transactionHash: depositReceipt.transactionHash })
       toast.success("Successfully deposited to vault.")
 
-      // 3. Parse shares from logs
-      let actualSharesReceived = BigInt(0)
-      const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-      for (const log of finalDepositReceipt.logs) {
-        // The `to` address in a Transfer event is the 3rd topic.
-        // It's a 32-byte hex string, with the 20-byte address padded.
-        // We extract the address from the topic for a reliable comparison.
-        const toAddress = log.topics[2] ? `0x${log.topics[2].slice(-40)}` : null
-        
-        if (log.address.toLowerCase() === vaultAddress.toLowerCase() && 
-            log.topics[0] === transferTopic && 
-            toAddress &&
-            toAddress.toLowerCase() === activeAccount.address.toLowerCase()) {
-          actualSharesReceived = BigInt(log.data)
-          break
-        }
-      }
-
-      if (actualSharesReceived === BigInt(0)) throw new Error("Could not determine shares received from vault deposit.")
-      toast.info(`Received ${actualSharesReceived.toString()} vault shares.`)
+      // Using the predicted shares from the preview call, no log parsing.
+      const actualSharesReceived = expectedShares
 
       // 4. Save initial deposit record to DB
       setDepositMessage('Saving deposit record...')
@@ -227,7 +221,8 @@ export function TopUpDialog({ isOpen, onClose, wageGroup, onSuccess }: TopUpDial
       })
 
       setDepositStatus('success')
-      setDepositMessage('Deposit successful!')
+      const successMessage = `Successfully deposited ${topUpAmount} USDC.`
+      setDepositMessage(successMessage)
       toast.success("Top-up complete!")
       onSuccess()
       setTimeout(onClose, 2000)
