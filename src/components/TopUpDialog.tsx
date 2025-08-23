@@ -104,7 +104,7 @@ export function TopUpDialog({ isOpen, onClose, wageGroup, onSuccess }: TopUpDial
   }, [balanceData, activeAccount])
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && activeAccount) {
       // Reset state when dialog opens
       setTopUpAmount('')
       setDepositStatus('idle')
@@ -112,7 +112,7 @@ export function TopUpDialog({ isOpen, onClose, wageGroup, onSuccess }: TopUpDial
       setIsDepositing(false)
       refetchBalance()
     }
-  }, [isOpen, refetchBalance])
+  }, [isOpen, refetchBalance, activeAccount])
 
   const handleDeposit = async () => {
     if (!wageGroup || !wageGroup.yieldSource || !activeAccount || !session?.user?.id || !vaultAddress) {
