@@ -164,7 +164,15 @@ export function TopUpDialog({ isOpen, onClose, wageGroup, onSuccess }: TopUpDial
       let actualSharesReceived = BigInt(0)
       const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
       for (const log of finalDepositReceipt.logs) {
-        if (log.address.toLowerCase() === vaultAddress.toLowerCase() && log.topics[0] === transferTopic && log.topics[2]?.toLowerCase() === activeAccount.address.toLowerCase()) {
+        // The `to` address in a Transfer event is the 3rd topic.
+        // It's a 32-byte hex string, with the 20-byte address padded.
+        // We extract the address from the topic for a reliable comparison.
+        const toAddress = log.topics[2] ? `0x${log.topics[2].slice(-40)}` : null
+        
+        if (log.address.toLowerCase() === vaultAddress.toLowerCase() && 
+            log.topics[0] === transferTopic && 
+            toAddress &&
+            toAddress.toLowerCase() === activeAccount.address.toLowerCase()) {
           actualSharesReceived = BigInt(log.data)
           break
         }
